@@ -36,6 +36,7 @@ session-handoff list --json --tool claude-code
 session-handoff list --query "refresh" --json
 session-handoff list --id 20260312 --json
 session-handoff list --since 6h --json
+session-handoff list --latest --json
 
 # Render handoff prompt for another tool (defaults target to generic)
 session-handoff render --id latest
@@ -75,7 +76,7 @@ Current capabilities:
 - `save --next` validation rejects empty/whitespace-only items to keep action lists clean
 - deterministic handoff prompt rendering (`render` now defaults to `target=generic` for quicker copy/paste flows)
 - git working-tree signals captured at save time with surfaced git-status errors (invalid/non-git project paths now fail fast)
-- `list --json` for scripting, plus `list --id`, `list --tool`, `list --project`, `list --query`, `list --since`, and `list --limit` filters for triage
+- `list --json` for scripting, plus `list --id`, `list --tool`, `list --project`, `list --query`, `list --since`, `list --latest`, and `list --limit` filters for triage
 - markdown + JSON bundle export (`export --target <tool>` tailors markdown handoff context)
 - SHA-256 checksum on JSON bundles plus optional signer identity metadata + ed25519 signature verification
 - optional encrypted JSON bundles (`--passphrase`) for transfer-at-rest protection
@@ -130,6 +131,10 @@ Imports are local and explicit (`--input <file>`). For safety:
 - **v0.7.3 — render UX fallback** ✅
   - `render` now defaults `--target` to `generic` (matching `export` behavior)
   - updated usage/docs and added regression test for generic fallback rendering
+- **v0.7.4 — list quick-pick UX** ✅
+  - added `list --latest` to quickly fetch the newest handoff without manual `--limit` tuning
+  - added validation to reject ambiguous `list --latest --limit <n>` combinations
+  - added regression tests for latest-selection and flag validation paths
 
 ## License
 

@@ -102,12 +102,16 @@ func cmdList(args []string, stdout io.Writer) error {
 	project := fs.String("project", "", "filter by project path")
 	query := fs.String("query", "", "case-insensitive substring filter across title/summary/next")
 	limit := fs.Int("limit", 0, "max number of most-recent records to show (0 = all)")
+	latest := fs.Bool("latest", false, "show only the most recent record")
 	since := fs.String("since", "", "show records from the last duration (e.g. 30m, 6h, 7h30m)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if *limit < 0 {
 		return errors.New("--limit must be >= 0")
+	}
+	if *latest && *limit > 0 {
+		return errors.New("--latest cannot be combined with --limit")
 	}
 
 	sinceDuration, err := parseSinceDuration(*since)
@@ -139,6 +143,9 @@ func cmdList(args []string, stdout io.Writer) error {
 	}
 	if sinceDuration > 0 {
 		items = filterBySince(items, time.Now().UTC(), sinceDuration)
+	}
+	if *latest && len(items) > 1 {
+		items = items[:1]
 	}
 	if *limit > 0 && len(items) > *limit {
 		items = items[:*limit]

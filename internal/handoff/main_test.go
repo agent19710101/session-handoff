@@ -242,6 +242,46 @@ func TestListRejectsNegativeLimit(t *testing.T) {
 	}
 }
 
+func TestListRejectsLatestWithLimit(t *testing.T) {
+	if err := cmdList([]string{"--latest", "--limit", "1"}, io.Discard); err == nil {
+		t.Fatalf("expected validation error for --latest with --limit")
+	}
+}
+
+func TestListLatestReturnsSingleMostRecentRecord(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+
+	store := storeFile{
+		Version: 1,
+		Items: []HandoffRecord{
+			{ID: "a", CreatedAt: time.Date(2026, 3, 12, 1, 0, 0, 0, time.UTC).Format(time.RFC3339), Tool: "codex", Project: "/p", Title: "A", Summary: "s"},
+			{ID: "b", CreatedAt: time.Date(2026, 3, 12, 2, 0, 0, 0, time.UTC).Format(time.RFC3339), Tool: "codex", Project: "/p", Title: "B", Summary: "s"},
+			{ID: "c", CreatedAt: time.Date(2026, 3, 12, 3, 0, 0, 0, time.UTC).Format(time.RFC3339), Tool: "codex", Project: "/p", Title: "C", Summary: "s"},
+		},
+	}
+	storePath := filepath.Join(tmp, "session-handoff", "handoffs.json")
+	if err := writeStore(storePath, store); err != nil {
+		t.Fatalf("write store: %v", err)
+	}
+
+	var out bytes.Buffer
+	if err := cmdList([]string{"--json", "--latest"}, &out); err != nil {
+		t.Fatalf("cmdList failed: %v", err)
+	}
+
+	var got []HandoffRecord
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("decode output: %v; output=%s", err, out.String())
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 record, got %d", len(got))
+	}
+	if got[0].ID != "c" {
+		t.Fatalf("expected most-recent record c, got %q", got[0].ID)
+	}
+}
+
 func TestListRejectsInvalidSince(t *testing.T) {
 	if err := cmdList([]string{"--since", "later"}, io.Discard); err == nil {
 		t.Fatalf("expected validation error for invalid --since")
