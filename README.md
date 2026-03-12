@@ -31,6 +31,7 @@ session-handoff save \
 # List handoffs (human or JSON)
 session-handoff list
 session-handoff list --tool codex --limit 5
+session-handoff list --project ~/repos/my-app --json
 session-handoff list --json --tool claude-code
 
 # Render handoff prompt for another tool
@@ -51,7 +52,7 @@ Current capabilities:
 - append-only session records
 - deterministic handoff prompt rendering
 - git working-tree signals captured at save time (when project is a git repo)
-- `list --json` for scripting, plus `list --tool` and `list --limit` filters for triage
+- `list --json` for scripting, plus `list --tool`, `list --project`, and `list --limit` filters for triage
 - markdown + JSON bundle export
 - SHA-256 checksum on JSON bundles with verification on import
 - JSON bundle import for cross-machine/tool transfer

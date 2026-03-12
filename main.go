@@ -73,7 +73,7 @@ func usage() {
 	fmt.Println()
 	fmt.Println("Usage:")
 	fmt.Println("  session-handoff save --tool <name> --project <path> --title <text> --summary <text> [--next <item>]...")
-	fmt.Println("  session-handoff list [--json] [--tool <name>] [--limit <n>]")
+	fmt.Println("  session-handoff list [--json] [--tool <name>] [--project <path>] [--limit <n>]")
 	fmt.Println("  session-handoff render --id <id|latest> --target <tool>")
 	fmt.Println("  session-handoff export --id <id|latest> [--format markdown|json] [--output handoff.md]")
 	fmt.Println("  session-handoff import --input handoff.json")
@@ -135,6 +135,7 @@ func cmdList(args []string) error {
 	fs := flag.NewFlagSet("list", flag.ContinueOnError)
 	asJSON := fs.Bool("json", false, "print records as json")
 	tool := fs.String("tool", "", "filter by source tool")
+	project := fs.String("project", "", "filter by project path")
 	limit := fs.Int("limit", 0, "max number of most-recent records to show (0 = all)")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -155,6 +156,9 @@ func cmdList(args []string) error {
 
 	if strings.TrimSpace(*tool) != "" {
 		items = filterByTool(items, *tool)
+	}
+	if strings.TrimSpace(*project) != "" {
+		items = filterByProject(items, *project)
 	}
 	if *limit > 0 && len(items) > *limit {
 		items = items[:*limit]
@@ -361,6 +365,25 @@ func filterByTool(items []handoffRecord, tool string) []handoffRecord {
 	filtered := make([]handoffRecord, 0, len(items))
 	for _, item := range items {
 		if strings.ToLower(strings.TrimSpace(item.Tool)) == wanted {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
+}
+
+func filterByProject(items []handoffRecord, project string) []handoffRecord {
+	if strings.TrimSpace(project) == "" {
+		return items
+	}
+	wanted, err := filepath.Abs(strings.TrimSpace(project))
+	if err != nil {
+		wanted = strings.TrimSpace(project)
+	}
+	wanted = filepath.Clean(wanted)
+
+	filtered := make([]handoffRecord, 0, len(items))
+	for _, item := range items {
+		if filepath.Clean(item.Project) == wanted {
 			filtered = append(filtered, item)
 		}
 	}

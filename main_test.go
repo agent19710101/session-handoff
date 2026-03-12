@@ -204,3 +204,52 @@ func TestListRejectsNegativeLimit(t *testing.T) {
 		t.Fatalf("expected validation error for negative limit")
 	}
 }
+
+func TestListFiltersByProject(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+
+	p1 := filepath.Join(tmp, "one")
+	p2 := filepath.Join(tmp, "two")
+	store := storeFile{
+		Version: 1,
+		Items: []handoffRecord{
+			{ID: "a", CreatedAt: time.Date(2026, 3, 12, 1, 0, 0, 0, time.UTC).Format(time.RFC3339), Tool: "codex", Project: p1, Title: "A", Summary: "s"},
+			{ID: "b", CreatedAt: time.Date(2026, 3, 12, 2, 0, 0, 0, time.UTC).Format(time.RFC3339), Tool: "codex", Project: p2, Title: "B", Summary: "s"},
+		},
+	}
+	storePath := filepath.Join(tmp, "session-handoff", "handoffs.json")
+	if err := writeStore(storePath, store); err != nil {
+		t.Fatalf("write store: %v", err)
+	}
+
+	origStdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe: %v", err)
+	}
+	os.Stdout = w
+
+	callErr := cmdList([]string{"--json", "--project", p2})
+	_ = w.Close()
+	os.Stdout = origStdout
+	if callErr != nil {
+		t.Fatalf("cmdList failed: %v", callErr)
+	}
+
+	var buf bytes.Buffer
+	if _, err := buf.ReadFrom(r); err != nil {
+		t.Fatalf("read output: %v", err)
+	}
+
+	var got []handoffRecord
+	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
+		t.Fatalf("decode output: %v; output=%s", err, buf.String())
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 record, got %d", len(got))
+	}
+	if got[0].ID != "b" {
+		t.Fatalf("expected project-filtered record b, got %q", got[0].ID)
+	}
+}
