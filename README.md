@@ -59,11 +59,19 @@ Current capabilities:
 - SHA-256 checksum on JSON bundles with verification on import
 - JSON bundle import for cross-machine/tool transfer
 
-## Roadmap
+## Minimal release plan (v0.x)
 
-- signed bundle verification (checksum + signer identity)
-- TUI selector for previous sessions
-- optional encrypted export bundles
+- **v0.6.0 — reliability + CI gate**
+  - robust git status parsing for spaces/renames ([#2](https://github.com/agent19710101/session-handoff/issues/2))
+  - GitHub Actions for `gofmt` + `go test` on push/PR ([#3](https://github.com/agent19710101/session-handoff/issues/3))
+- **v0.7.0 — command quality hardening**
+  - expand tests for `save`/`render`/`export` edge cases ([#4](https://github.com/agent19710101/session-handoff/issues/4))
+- **v0.8.0 — deeper modularization**
+  - continue command/package split beyond current modular baseline ([#5](https://github.com/agent19710101/session-handoff/issues/5))
+- **v0.9.0 — trust + UX improvements**
+  - signed bundle verification (checksum + signer identity)
+  - optional encrypted export bundles
+  - TUI selector for prior handoffs
 
 ## License
 
