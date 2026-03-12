@@ -58,6 +58,7 @@ session-handoff import --input handoff.secure.json --passphrase "$HANDOFF_PASSPH
 # Interactive selector / script-friendly output
 session-handoff select
 session-handoff select --query "refresh" --print-id
+session-handoff select --id 20260312 --since 6h --print-id
 
 # Control ID conflicts during import
 session-handoff import --input handoff.json --on-conflict skip --allow-unsigned
@@ -76,7 +77,7 @@ Current capabilities:
 - markdown + JSON bundle export (`export --target <tool>` tailors markdown handoff context)
 - SHA-256 checksum on JSON bundles plus optional signer identity metadata + ed25519 signature verification
 - optional encrypted JSON bundles (`--passphrase`) for transfer-at-rest protection
-- interactive handoff selector (`select`) with script-friendly `--print-id` mode
+- interactive handoff selector (`select`) with script-friendly `--print-id` mode and time/id filters (`--since`, `--id`)
 - JSON bundle import for cross-machine/tool transfer with conflict handling (`--on-conflict fail|skip|replace`)
 - RFC3339 UTC timestamp validation for stored/imported records
 - crash-safe atomic store updates with lock-based concurrent write protection
@@ -116,6 +117,9 @@ Imports are local and explicit (`--input <file>`). For safety:
   - signed bundle verification (checksum + signer identity)
   - optional encrypted export/import bundles
   - interactive selector for prior handoffs (`select`)
+- **v0.7.1 — selector filtering parity** ✅
+  - added `select --id <prefix>` and `select --since <duration>` for faster scriptable pick flows
+  - aligned `select` validation with `list` (`--limit >= 0`, strict duration parsing)
 
 ## License
 

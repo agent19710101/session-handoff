@@ -60,7 +60,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  session-handoff render --id <id|latest> --target <tool>")
 	fmt.Fprintln(w, "  session-handoff export --id <id|latest> [--format markdown|json] [--target <tool>] [--output handoff.md]")
 	fmt.Fprintln(w, "  session-handoff import --input handoff.json [--on-conflict fail|skip|replace] [--passphrase <text>] [--allow-unsigned]")
-	fmt.Fprintln(w, "  session-handoff select [--query <text>] [--tool <name>] [--project <path>] [--limit <n>] [--print-id]")
+	fmt.Fprintln(w, "  session-handoff select [--query <text>] [--id <prefix>] [--tool <name>] [--project <path>] [--since <duration>] [--limit <n>] [--print-id]")
 }
 
 func cmdSave(args []string, stdout io.Writer) error {
@@ -405,11 +405,21 @@ func cmdImport(args []string, stdout io.Writer) error {
 func cmdSelect(args []string, stdout io.Writer) error {
 	fs := flag.NewFlagSet("select", flag.ContinueOnError)
 	query := fs.String("query", "", "case-insensitive filter by title/summary/next")
+	idPrefix := fs.String("id", "", "filter by handoff id prefix")
 	tool := fs.String("tool", "", "filter by source tool")
 	project := fs.String("project", "", "filter by project path")
+	since := fs.String("since", "", "show records from the last duration (e.g. 30m, 6h, 7h30m)")
 	limit := fs.Int("limit", 0, "max number of records to show")
 	printID := fs.Bool("print-id", false, "print only selected id")
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *limit < 0 {
+		return errors.New("--limit must be >= 0")
+	}
+
+	sinceDuration, err := parseSinceDuration(*since)
+	if err != nil {
 		return err
 	}
 
@@ -419,6 +429,9 @@ func cmdSelect(args []string, stdout io.Writer) error {
 	}
 	items := append([]HandoffRecord(nil), store.Items...)
 	sort.Slice(items, func(i, j int) bool { return items[i].CreatedAt > items[j].CreatedAt })
+	if strings.TrimSpace(*idPrefix) != "" {
+		items = filterByIDPrefix(items, *idPrefix)
+	}
 	if strings.TrimSpace(*tool) != "" {
 		items = filterByTool(items, *tool)
 	}
@@ -427,6 +440,9 @@ func cmdSelect(args []string, stdout io.Writer) error {
 	}
 	if strings.TrimSpace(*query) != "" {
 		items = filterByQuery(items, *query)
+	}
+	if sinceDuration > 0 {
+		items = filterBySince(items, time.Now().UTC(), sinceDuration)
 	}
 	if *limit > 0 && len(items) > *limit {
 		items = items[:*limit]

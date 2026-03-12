@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestExportImportSignedEncryptedBundle(t *testing.T) {
@@ -82,5 +83,41 @@ func TestSelectPrintID(t *testing.T) {
 	}
 	if strings.TrimSpace(out.String()) == "" {
 		t.Fatalf("expected id output")
+	}
+}
+
+func TestSelectSupportsIDPrefixAndSince(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+
+	now := time.Now().UTC()
+	store := storeFile{
+		Version: 1,
+		Items: []HandoffRecord{
+			{ID: "20260312-010000", CreatedAt: now.Add(-2 * time.Hour).Format(time.RFC3339), Tool: "codex", Project: tmp, Title: "old", Summary: "s"},
+			{ID: "20260312-020000", CreatedAt: now.Add(-20 * time.Minute).Format(time.RFC3339), Tool: "codex", Project: tmp, Title: "recent", Summary: "s"},
+			{ID: "20260311-230000", CreatedAt: now.Add(-10 * time.Minute).Format(time.RFC3339), Tool: "codex", Project: tmp, Title: "other-day", Summary: "s"},
+		},
+	}
+	storePath := filepath.Join(tmp, "session-handoff", "handoffs.json")
+	if err := writeStore(storePath, store); err != nil {
+		t.Fatalf("write store: %v", err)
+	}
+
+	var out strings.Builder
+	if err := cmdSelect([]string{"--id", "20260312", "--since", "30m", "--print-id"}, &out); err != nil {
+		t.Fatalf("cmdSelect failed: %v", err)
+	}
+	if got := strings.TrimSpace(out.String()); got != "20260312-020000" {
+		t.Fatalf("expected filtered id 20260312-020000, got %q", got)
+	}
+}
+
+func TestSelectRejectsInvalidFlags(t *testing.T) {
+	if err := cmdSelect([]string{"--limit", "-1"}, io.Discard); err == nil {
+		t.Fatalf("expected validation error for negative --limit")
+	}
+	if err := cmdSelect([]string{"--since", "later"}, io.Discard); err == nil {
+		t.Fatalf("expected validation error for invalid --since")
 	}
 }
