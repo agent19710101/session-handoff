@@ -86,8 +86,13 @@ func cmdSave(args []string) error {
 		return err
 	}
 
+	recID := generateUniqueID(store.Items, now)
+	if recID == "" {
+		return errors.New("could not allocate unique handoff id")
+	}
+
 	rec := handoffRecord{
-		ID:        now.Format("20060102-150405"),
+		ID:        recID,
 		CreatedAt: now.Format(time.RFC3339),
 		Tool:      strings.TrimSpace(*tool),
 		Project:   absProject,

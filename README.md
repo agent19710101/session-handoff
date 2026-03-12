@@ -51,7 +51,7 @@ session-handoff import --input handoff.json
 Current capabilities:
 - modular CLI code layout (`main`, `store`, `filters`, `render`, `git` concerns split for easier iteration)
 - local JSON store
-- append-only session records
+- append-only session records with collision-safe unique handoff IDs
 - deterministic handoff prompt rendering
 - git working-tree signals captured at save time (when project is a git repo)
 - `list --json` for scripting, plus `list --tool`, `list --project`, `list --since`, and `list --limit` filters for triage
