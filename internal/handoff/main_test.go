@@ -519,9 +519,29 @@ func TestCmdExportStdoutAndFileModes(t *testing.T) {
 	}
 }
 
-func TestCmdRenderRequiresTarget(t *testing.T) {
-	if err := cmdRender([]string{"--id", "latest"}, io.Discard); err == nil {
-		t.Fatalf("expected missing target error")
+func TestCmdRenderDefaultsTargetToGeneric(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	storePath := filepath.Join(tmp, "session-handoff", "handoffs.json")
+
+	rec := HandoffRecord{
+		ID:        "latest-like",
+		CreatedAt: "2026-03-12T10:00:00Z",
+		Tool:      "codex",
+		Project:   "/tmp/proj",
+		Title:     "Render default target",
+		Summary:   "Ensure render has a sensible fallback",
+	}
+	if err := writeStore(storePath, storeFile{Version: 1, Items: []HandoffRecord{rec}}); err != nil {
+		t.Fatalf("write store: %v", err)
+	}
+
+	var out bytes.Buffer
+	if err := cmdRender([]string{"--id", "latest-like"}, &out); err != nil {
+		t.Fatalf("cmdRender failed: %v", err)
+	}
+	if !strings.Contains(out.String(), "Target tool: generic") {
+		t.Fatalf("expected generic fallback target, got: %s", out.String())
 	}
 }
 

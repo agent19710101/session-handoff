@@ -175,12 +175,9 @@ func cmdList(args []string, stdout io.Writer) error {
 func cmdRender(args []string, stdout io.Writer) error {
 	fs := flag.NewFlagSet("render", flag.ContinueOnError)
 	id := fs.String("id", "latest", "handoff id or latest")
-	target := fs.String("target", "", "target tool")
+	target := fs.String("target", "generic", "target tool")
 	if err := fs.Parse(args); err != nil {
 		return err
-	}
-	if strings.TrimSpace(*target) == "" {
-		return errors.New("render requires --target")
 	}
 
 	rec, err := loadRecord(*id)
@@ -188,7 +185,12 @@ func cmdRender(args []string, stdout io.Writer) error {
 		return err
 	}
 
-	fmt.Fprint(stdout, RenderMarkdown(rec, strings.TrimSpace(*target)))
+	selectedTarget := strings.TrimSpace(*target)
+	if selectedTarget == "" {
+		selectedTarget = "generic"
+	}
+
+	fmt.Fprint(stdout, RenderMarkdown(rec, selectedTarget))
 	return nil
 }
 
