@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -20,6 +21,7 @@ type handoffRecord struct {
 	Title     string   `json:"title"`
 	Summary   string   `json:"summary"`
 	Next      []string `json:"next"`
+	Changed   []string `json:"changed,omitempty"`
 }
 
 type storeFile struct {
@@ -41,6 +43,8 @@ func main() {
 		err = cmdList(os.Args[2:])
 	case "render":
 		err = cmdRender(os.Args[2:])
+	case "export":
+		err = cmdExport(os.Args[2:])
 	case "help", "-h", "--help":
 		usage()
 		return
@@ -61,6 +65,7 @@ func usage() {
 	fmt.Println("  session-handoff save --tool <name> --project <path> --title <text> --summary <text> [--next <item>]...")
 	fmt.Println("  session-handoff list")
 	fmt.Println("  session-handoff render --id <id|latest> --target <tool>")
+	fmt.Println("  session-handoff export --id <id|latest> [--output handoff.md]")
 }
 
 func cmdSave(args []string) error {
@@ -90,6 +95,11 @@ func cmdSave(args []string) error {
 	}
 
 	now := time.Now().UTC()
+	changed, err := detectChangedFiles(absProject)
+	if err != nil {
+		return err
+	}
+
 	rec := handoffRecord{
 		ID:        now.Format("20060102-150405"),
 		CreatedAt: now.Format(time.RFC3339),
@@ -98,6 +108,7 @@ func cmdSave(args []string) error {
 		Title:     strings.TrimSpace(*title),
 		Summary:   strings.TrimSpace(*summary),
 		Next:      next,
+		Changed:   changed,
 	}
 
 	store.Items = append(store.Items, rec)
@@ -150,44 +161,81 @@ func cmdRender(args []string) error {
 		return errors.New("render requires --target")
 	}
 
+	rec, err := loadRecord(*id)
+	if err != nil {
+		return err
+	}
+
+	fmt.Print(renderMarkdown(rec, strings.TrimSpace(*target)))
+	return nil
+}
+
+func cmdExport(args []string) error {
+	fs := flag.NewFlagSet("export", flag.ContinueOnError)
+	id := fs.String("id", "latest", "handoff id or latest")
+	out := fs.String("output", "", "file path (default stdout)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	rec, err := loadRecord(*id)
+	if err != nil {
+		return err
+	}
+	md := renderMarkdown(rec, "generic")
+	if strings.TrimSpace(*out) == "" {
+		fmt.Print(md)
+		return nil
+	}
+	if err := os.WriteFile(*out, []byte(md), 0o644); err != nil {
+		return fmt.Errorf("write export file: %w", err)
+	}
+	fmt.Printf("exported %s\n", *out)
+	return nil
+}
+
+func loadRecord(id string) (handoffRecord, error) {
 	store, _, err := loadStore()
 	if err != nil {
-		return err
+		return handoffRecord{}, err
 	}
 	if len(store.Items) == 0 {
-		return errors.New("no handoffs to render")
+		return handoffRecord{}, errors.New("no handoffs saved")
 	}
+	return pickRecord(store.Items, id)
+}
 
-	rec, err := pickRecord(store.Items, *id)
-	if err != nil {
-		return err
+func renderMarkdown(rec handoffRecord, target string) string {
+	var b strings.Builder
+	b.WriteString("# Session Handoff\n")
+	b.WriteString(fmt.Sprintf("- Source tool: %s\n", rec.Tool))
+	b.WriteString(fmt.Sprintf("- Target tool: %s\n", target))
+	b.WriteString(fmt.Sprintf("- Project: %s\n", rec.Project))
+	b.WriteString(fmt.Sprintf("- Created: %s\n", rec.CreatedAt))
+	b.WriteString(fmt.Sprintf("- Topic: %s\n\n", rec.Title))
+	b.WriteString("## Current state\n")
+	b.WriteString(rec.Summary + "\n\n")
+	if len(rec.Changed) > 0 {
+		b.WriteString("## Working tree signals\n")
+		for _, f := range rec.Changed {
+			b.WriteString("- " + f + "\n")
+		}
+		b.WriteString("\n")
 	}
-
-	fmt.Println("# Session Handoff")
-	fmt.Printf("- Source tool: %s\n", rec.Tool)
-	fmt.Printf("- Target tool: %s\n", strings.TrimSpace(*target))
-	fmt.Printf("- Project: %s\n", rec.Project)
-	fmt.Printf("- Created: %s\n", rec.CreatedAt)
-	fmt.Printf("- Topic: %s\n", rec.Title)
-	fmt.Println()
-	fmt.Println("## Current state")
-	fmt.Println(rec.Summary)
-	fmt.Println()
-	fmt.Println("## Requested continuation")
+	b.WriteString("## Requested continuation\n")
 	if len(rec.Next) == 0 {
-		fmt.Println("- Continue from current state and produce a small, verifiable next change.")
+		b.WriteString("- Continue from current state and produce a small, verifiable next change.\n\n")
 	} else {
 		for _, step := range rec.Next {
-			fmt.Printf("- %s\n", step)
+			b.WriteString("- " + step + "\n")
 		}
+		b.WriteString("\n")
 	}
-	fmt.Println()
-	fmt.Println("## Constraints")
-	fmt.Println("- Keep commits small and reviewable.")
-	fmt.Println("- Run formatting and tests before finalizing.")
-	fmt.Println("- Summarize changes, risks, and follow-up tasks.")
-
-	return nil
+	b.WriteString("## Constraints\n")
+	b.WriteString("- Keep commits small and reviewable.\n")
+	b.WriteString("- Run formatting and tests before finalizing.\n")
+	b.WriteString("- Summarize changes, risks, and follow-up tasks.\n")
+	return b.String()
 }
 
 func pickRecord(items []handoffRecord, id string) (handoffRecord, error) {
@@ -206,6 +254,32 @@ func pickRecord(items []handoffRecord, id string) (handoffRecord, error) {
 		}
 	}
 	return handoffRecord{}, fmt.Errorf("handoff id %q not found", id)
+}
+
+func detectChangedFiles(project string) ([]string, error) {
+	cmd := exec.Command("git", "-C", project, "status", "--short")
+	out, err := cmd.Output()
+	if err != nil {
+		var ee *exec.ExitError
+		if errors.As(err, &ee) {
+			return nil, nil // not a git repo or other git issue: keep save usable
+		}
+		return nil, fmt.Errorf("collect changed files: %w", err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	var files []string
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		parts := strings.Fields(line)
+		if len(parts) < 2 {
+			continue
+		}
+		files = append(files, strings.Join(parts[1:], " "))
+	}
+	return files, nil
 }
 
 func loadStore() (storeFile, string, error) {

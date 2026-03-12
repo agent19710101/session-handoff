@@ -32,6 +32,9 @@ session-handoff list
 
 # render handoff for another tool
 session-handoff render --id latest --target claude-code
+
+# export markdown bundle for sharing
+session-handoff export --id latest --output handoff.md
 ```
 
 ## Status
@@ -40,6 +43,8 @@ v0 focuses on:
 - local JSON store
 - append-only session records
 - deterministic handoff prompt rendering
+- optional git working-tree signals captured at save time
+- markdown export for sharing in issues/PRs
 
 Planned next:
 - git-aware changed-files capture
