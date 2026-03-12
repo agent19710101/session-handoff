@@ -16,6 +16,7 @@ import (
 func TestExportImportSignedEncryptedBundle(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
+	initGitRepo(t, tmp)
 
 	if err := cmdSave([]string{"--tool", "codex", "--project", tmp, "--title", "Signed", "--summary", "Encrypted transfer"}, io.Discard); err != nil {
 		t.Fatalf("save: %v", err)
@@ -51,6 +52,7 @@ func TestExportImportSignedEncryptedBundle(t *testing.T) {
 func TestImportRejectsUnsignedByDefault(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
+	initGitRepo(t, tmp)
 
 	if err := cmdSave([]string{"--tool", "codex", "--project", tmp, "--title", "Unsigned", "--summary", "Legacy"}, io.Discard); err != nil {
 		t.Fatalf("save: %v", err)
@@ -71,6 +73,7 @@ func TestImportRejectsUnsignedByDefault(t *testing.T) {
 func TestSelectPrintID(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
+	initGitRepo(t, tmp)
 	if err := cmdSave([]string{"--tool", "codex", "--project", tmp, "--title", "one", "--summary", "s"}, io.Discard); err != nil {
 		t.Fatal(err)
 	}

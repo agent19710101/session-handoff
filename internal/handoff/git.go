@@ -2,19 +2,22 @@ package handoff
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"os/exec"
 	"sort"
+	"strings"
 )
 
 func detectChangedFiles(project string) ([]string, error) {
 	cmd := exec.Command("git", "-C", project, "status", "--porcelain=v1", "-z")
 	out, err := cmd.Output()
 	if err != nil {
-		var ee *exec.ExitError
-		if errors.As(err, &ee) {
-			return nil, nil // not a git repo or other git issue: keep save usable
+		if ee, ok := err.(*exec.ExitError); ok {
+			detail := strings.TrimSpace(string(ee.Stderr))
+			if detail != "" {
+				return nil, fmt.Errorf("collect changed files: git status failed: %s", detail)
+			}
+			return nil, fmt.Errorf("collect changed files: git status failed")
 		}
 		return nil, fmt.Errorf("collect changed files: %w", err)
 	}

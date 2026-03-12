@@ -14,6 +14,7 @@ import (
 func TestExportJSONAndImport(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
+	initGitRepo(t, tmp)
 
 	if err := cmdSave([]string{
 		"--tool", "codex",
@@ -83,6 +84,7 @@ func TestListJSONEmpty(t *testing.T) {
 func TestExportJSONIncludesChecksum(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
+	initGitRepo(t, tmp)
 
 	if err := cmdSave([]string{
 		"--tool", "codex",
@@ -379,6 +381,7 @@ func TestCmdSaveNormalizesProjectPath(t *testing.T) {
 	if err := os.MkdirAll(project, 0o755); err != nil {
 		t.Fatalf("mkdir project: %v", err)
 	}
+	initGitRepo(t, project)
 
 	prev, err := os.Getwd()
 	if err != nil {
@@ -453,6 +456,7 @@ func TestCmdRenderOutputSections(t *testing.T) {
 func TestCmdExportUnsupportedFormat(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
+	initGitRepo(t, tmp)
 	if err := cmdSave([]string{
 		"--tool", "codex",
 		"--project", tmp,
@@ -474,6 +478,7 @@ func TestCmdExportUnsupportedFormat(t *testing.T) {
 func TestCmdExportStdoutAndFileModes(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
+	initGitRepo(t, tmp)
 	if err := cmdSave([]string{
 		"--tool", "codex",
 		"--project", tmp,
@@ -525,6 +530,23 @@ func TestCmdSaveInvalidProjectPath(t *testing.T) {
 	err := cmdSave([]string{"--tool", "codex", "--project", bad, "--title", "x", "--summary", "y"}, io.Discard)
 	if err == nil {
 		t.Fatalf("expected project path resolution error")
+	}
+}
+
+func TestCmdSaveRejectsEmptyNextItem(t *testing.T) {
+	tmp := t.TempDir()
+	err := cmdSave([]string{
+		"--tool", "codex",
+		"--project", tmp,
+		"--title", "Trim next",
+		"--summary", "Validation",
+		"--next", "   ",
+	}, io.Discard)
+	if err == nil {
+		t.Fatalf("expected empty --next validation error")
+	}
+	if !strings.Contains(err.Error(), "non-empty --next") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

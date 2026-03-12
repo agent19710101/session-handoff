@@ -2,6 +2,7 @@ package handoff
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -40,5 +41,15 @@ func TestParsePorcelainV1ZRejectsRenameMissingSource(t *testing.T) {
 	_, err := parsePorcelainV1Z([]byte("R  only-destination.txt\x00"))
 	if err == nil {
 		t.Fatalf("expected rename missing source error")
+	}
+}
+
+func TestDetectChangedFilesReturnsGitFailure(t *testing.T) {
+	_, err := detectChangedFiles(t.TempDir())
+	if err == nil {
+		t.Fatalf("expected git status error for non-repo path")
+	}
+	if !strings.Contains(err.Error(), "git status failed") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }

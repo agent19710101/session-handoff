@@ -19,7 +19,7 @@ go install github.com/agent19710101/session-handoff@latest
 ## Examples
 
 ```bash
-# Save a session note
+# Save a session note (project path should be a git worktree)
 session-handoff save \
   --tool codex \
   --project ~/repos/my-app \
@@ -71,8 +71,9 @@ Current capabilities:
 - standard Go modular layout with `cmd/session-handoff`, `internal/handoff`, and reusable `pkg/handoffid`
 - local JSON store
 - append-only session records with collision-safe unique handoff IDs
+- `save --next` validation rejects empty/whitespace-only items to keep action lists clean
 - deterministic handoff prompt rendering
-- git working-tree signals captured at save time (when project is a git repo)
+- git working-tree signals captured at save time with surfaced git-status errors (invalid/non-git project paths now fail fast)
 - `list --json` for scripting, plus `list --id`, `list --tool`, `list --project`, `list --query`, `list --since`, and `list --limit` filters for triage
 - markdown + JSON bundle export (`export --target <tool>` tailors markdown handoff context)
 - SHA-256 checksum on JSON bundles plus optional signer identity metadata + ed25519 signature verification
@@ -120,6 +121,11 @@ Imports are local and explicit (`--input <file>`). For safety:
 - **v0.7.1 — selector filtering parity** ✅
   - added `select --id <prefix>` and `select --since <duration>` for faster scriptable pick flows
   - aligned `select` validation with `list` (`--limit >= 0`, strict duration parsing)
+- **v0.7.2 — save-path reliability + maintainability** ✅
+  - split CLI command handlers into dedicated internal files to reduce `main.go` complexity
+  - `save` now rejects empty `--next` entries after trim
+  - `save` now returns git-status failures directly instead of silently swallowing them
+  - CI now pins staticcheck version for reproducible lint runs
 
 ## License
 

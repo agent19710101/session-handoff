@@ -75,6 +75,7 @@ func TestImportRejectsNonUTCTimestamp(t *testing.T) {
 func TestConcurrentSavesDoNotLoseRecords(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
+	initGitRepo(t, tmp)
 
 	const workers = 20
 	var wg sync.WaitGroup
