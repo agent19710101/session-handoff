@@ -97,9 +97,9 @@ Imports are local and explicit (`--input <file>`). For safety:
   - added `import --on-conflict fail|skip|replace` for safer sync workflows
   - added conflict-policy tests for skip/replace/validation paths
 - **v0.7.0 — trust + UX improvements**
-  - signed bundle verification (checksum + signer identity)
-  - optional encrypted export bundles
-  - TUI selector for prior handoffs
+  - signed bundle verification (checksum + signer identity) — [#11](https://github.com/agent19710101/session-handoff/issues/11)
+  - optional encrypted export bundles — [#12](https://github.com/agent19710101/session-handoff/issues/12)
+  - TUI selector for prior handoffs — [#13](https://github.com/agent19710101/session-handoff/issues/13)
 
 ## License
 
