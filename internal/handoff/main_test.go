@@ -585,6 +585,50 @@ func TestCmdRenderDefaultsTargetToGeneric(t *testing.T) {
 	}
 }
 
+func TestCmdRenderSupportsUniqueIDPrefix(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	storePath := filepath.Join(tmp, "session-handoff", "handoffs.json")
+
+	store := storeFile{Version: 1, Items: []HandoffRecord{
+		{ID: "20260312-010000", CreatedAt: "2026-03-12T01:00:00Z", Tool: "codex", Project: "/tmp/proj", Title: "first", Summary: "s"},
+		{ID: "20260311-230000", CreatedAt: "2026-03-11T23:00:00Z", Tool: "codex", Project: "/tmp/proj", Title: "second", Summary: "s"},
+	}}
+	if err := writeStore(storePath, store); err != nil {
+		t.Fatalf("write store: %v", err)
+	}
+
+	var out bytes.Buffer
+	if err := cmdRender([]string{"--id", "20260312"}, &out); err != nil {
+		t.Fatalf("cmdRender failed: %v", err)
+	}
+	if !strings.Contains(out.String(), "Topic: first") {
+		t.Fatalf("expected prefixed record to render, got: %s", out.String())
+	}
+}
+
+func TestCmdRenderRejectsAmbiguousIDPrefix(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	storePath := filepath.Join(tmp, "session-handoff", "handoffs.json")
+
+	store := storeFile{Version: 1, Items: []HandoffRecord{
+		{ID: "20260312-010000", CreatedAt: "2026-03-12T01:00:00Z", Tool: "codex", Project: "/tmp/proj", Title: "first", Summary: "s"},
+		{ID: "20260312-020000", CreatedAt: "2026-03-12T02:00:00Z", Tool: "codex", Project: "/tmp/proj", Title: "second", Summary: "s"},
+	}}
+	if err := writeStore(storePath, store); err != nil {
+		t.Fatalf("write store: %v", err)
+	}
+
+	err := cmdRender([]string{"--id", "20260312"}, io.Discard)
+	if err == nil {
+		t.Fatalf("expected ambiguous prefix error")
+	}
+	if !strings.Contains(err.Error(), "ambiguous") {
+		t.Fatalf("expected ambiguous prefix error, got: %v", err)
+	}
+}
+
 func TestCmdSaveInvalidProjectPath(t *testing.T) {
 	bad := string([]byte{0x00})
 	err := cmdSave([]string{"--tool", "codex", "--project", bad, "--title", "x", "--summary", "y"}, io.Discard)

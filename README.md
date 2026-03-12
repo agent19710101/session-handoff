@@ -40,10 +40,11 @@ session-handoff list --latest --json
 
 # Render handoff prompt for another tool (defaults target to generic)
 session-handoff render --id latest
-session-handoff render --id latest --target claude-code
+session-handoff render --id 20260312 --target claude-code   # unique ID prefix works
 
 # Export as markdown (default), optionally tailored for target tool
 session-handoff export --id latest --target claude-code --output handoff.md
+session-handoff export --id 20260312 --format json --output handoff.json  # unique ID prefix works
 
 # Export/import portable JSON bundle (legacy checksum-only)
 session-handoff export --id latest --format json --output handoff.json
@@ -74,7 +75,7 @@ Current capabilities:
 - local JSON store
 - append-only session records with collision-safe unique handoff IDs
 - `save --next` validation rejects empty/whitespace-only items to keep action lists clean
-- deterministic handoff prompt rendering (`render` now defaults to `target=generic` for quicker copy/paste flows)
+- deterministic handoff prompt rendering (`render` defaults `target=generic`; `render/export --id` now accept unique ID prefixes)
 - git working-tree signals captured at save time with surfaced git-status errors (invalid/non-git project paths now fail fast)
 - `list --json` for scripting, plus `list --id`, `list --tool`, `list --project`, `list --query`, `list --since`, `list --latest`, and `list --limit` filters for triage
 - markdown + JSON bundle export (`export --target <tool>` tailors markdown handoff context)
@@ -135,6 +136,10 @@ Imports are local and explicit (`--input <file>`). For safety:
   - added `list --latest` to quickly fetch the newest handoff without manual `--limit` tuning
   - added validation to reject ambiguous `list --latest --limit <n>` combinations
   - added regression tests for latest-selection and flag validation paths
+- **v0.7.5 — render/export ID-prefix UX** ✅
+  - `render --id` and `export --id` now accept unique ID prefixes in addition to exact IDs and `latest`
+  - added explicit ambiguity errors for non-unique prefixes to prevent accidental wrong handoff selection
+  - updated usage/docs and added regression tests for prefix-selection behavior
 
 ## License
 

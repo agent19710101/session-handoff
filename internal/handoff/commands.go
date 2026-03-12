@@ -181,7 +181,7 @@ func cmdList(args []string, stdout io.Writer) error {
 
 func cmdRender(args []string, stdout io.Writer) error {
 	fs := flag.NewFlagSet("render", flag.ContinueOnError)
-	id := fs.String("id", "latest", "handoff id or latest")
+	id := fs.String("id", "latest", "handoff id, unique id prefix, or latest")
 	target := fs.String("target", "generic", "target tool")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -203,7 +203,7 @@ func cmdRender(args []string, stdout io.Writer) error {
 
 func cmdExport(args []string, stdout io.Writer) error {
 	fs := flag.NewFlagSet("export", flag.ContinueOnError)
-	id := fs.String("id", "latest", "handoff id or latest")
+	id := fs.String("id", "latest", "handoff id, unique id prefix, or latest")
 	out := fs.String("output", "", "file path (default stdout)")
 	format := fs.String("format", "markdown", "output format: markdown|json")
 	target := fs.String("target", "generic", "target tool used for markdown export context")

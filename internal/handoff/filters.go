@@ -102,7 +102,8 @@ func filterByQuery(items []HandoffRecord, query string) []HandoffRecord {
 }
 
 func pickRecord(items []HandoffRecord, id string) (HandoffRecord, error) {
-	if strings.TrimSpace(id) == "latest" {
+	wanted := strings.TrimSpace(id)
+	if wanted == "latest" {
 		latest := items[0]
 		for _, it := range items[1:] {
 			if it.CreatedAt > latest.CreatedAt {
@@ -112,9 +113,24 @@ func pickRecord(items []HandoffRecord, id string) (HandoffRecord, error) {
 		return latest, nil
 	}
 	for _, it := range items {
-		if it.ID == id {
+		if it.ID == wanted {
 			return it, nil
 		}
+	}
+
+	var matched HandoffRecord
+	prefixMatches := 0
+	for _, it := range items {
+		if strings.HasPrefix(it.ID, wanted) {
+			matched = it
+			prefixMatches++
+		}
+	}
+	if prefixMatches == 1 {
+		return matched, nil
+	}
+	if prefixMatches > 1 {
+		return HandoffRecord{}, fmt.Errorf("handoff id prefix %q is ambiguous (%d matches)", wanted, prefixMatches)
 	}
 	return HandoffRecord{}, fmt.Errorf("handoff id %q not found", id)
 }
