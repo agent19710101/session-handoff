@@ -1,4 +1,4 @@
-package main
+package handoff
 
 import (
 	"crypto/sha256"
@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-func renderMarkdown(rec handoffRecord, target string) string {
+func RenderMarkdown(rec HandoffRecord, target string) string {
 	var b strings.Builder
 	b.WriteString("# Session Handoff\n")
 	b.WriteString(fmt.Sprintf("- Source tool: %s\n", rec.Tool))
@@ -41,7 +41,7 @@ func renderMarkdown(rec handoffRecord, target string) string {
 	return b.String()
 }
 
-func recordChecksum(rec handoffRecord) (string, error) {
+func RecordChecksum(rec HandoffRecord) (string, error) {
 	data, err := json.Marshal(rec)
 	if err != nil {
 		return "", fmt.Errorf("encode record checksum payload: %w", err)

@@ -1,4 +1,4 @@
-package main
+package handoff
 
 import (
 	"encoding/json"
@@ -17,7 +17,7 @@ func loadStore() (storeFile, string, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return storeFile{Version: 1, Items: []handoffRecord{}}, path, nil
+			return storeFile{Version: 1, Items: []HandoffRecord{}}, path, nil
 		}
 		return storeFile{}, "", fmt.Errorf("read store: %w", err)
 	}
@@ -30,7 +30,7 @@ func loadStore() (storeFile, string, error) {
 		s.Version = 1
 	}
 	if s.Items == nil {
-		s.Items = []handoffRecord{}
+		s.Items = []HandoffRecord{}
 	}
 	return s, path, nil
 }
@@ -57,13 +57,13 @@ func defaultStorePath() (string, error) {
 	return filepath.Join(cfg, "session-handoff", "handoffs.json"), nil
 }
 
-func loadRecord(id string) (handoffRecord, error) {
+func loadRecord(id string) (HandoffRecord, error) {
 	store, _, err := loadStore()
 	if err != nil {
-		return handoffRecord{}, err
+		return HandoffRecord{}, err
 	}
 	if len(store.Items) == 0 {
-		return handoffRecord{}, errors.New("no handoffs saved")
+		return HandoffRecord{}, errors.New("no handoffs saved")
 	}
 	return pickRecord(store.Items, id)
 }

@@ -1,60 +1,64 @@
-package main
+package handoff
 
 import (
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/agent19710101/session-handoff/pkg/handoffid"
 )
 
-func main() {
-	if len(os.Args) < 2 {
-		usage()
-		os.Exit(2)
+func Run(args []string, stdout, stderr io.Writer) error {
+	if len(args) < 1 {
+		printUsage(stdout)
+		return errors.New("missing command")
 	}
 
 	var err error
-	switch os.Args[1] {
+	switch args[0] {
 	case "save":
-		err = cmdSave(os.Args[2:])
+		err = cmdSave(args[1:], stdout)
 	case "list":
-		err = cmdList(os.Args[2:])
+		err = cmdList(args[1:], stdout)
 	case "render":
-		err = cmdRender(os.Args[2:])
+		err = cmdRender(args[1:], stdout)
 	case "export":
-		err = cmdExport(os.Args[2:])
+		err = cmdExport(args[1:], stdout)
 	case "import":
-		err = cmdImport(os.Args[2:])
+		err = cmdImport(args[1:], stdout)
 	case "help", "-h", "--help":
-		usage()
-		return
+		printUsage(stdout)
+		return nil
 	default:
-		err = fmt.Errorf("unknown command %q", os.Args[1])
+		err = fmt.Errorf("unknown command %q", args[0])
 	}
 
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return err
 	}
+	return nil
 }
 
-func usage() {
-	fmt.Println("session-handoff: portable handoff bundles for AI coding sessions")
-	fmt.Println()
-	fmt.Println("Usage:")
-	fmt.Println("  session-handoff save --tool <name> --project <path> --title <text> --summary <text> [--next <item>]...")
-	fmt.Println("  session-handoff list [--json] [--tool <name>] [--project <path>] [--since <duration>] [--limit <n>]")
-	fmt.Println("  session-handoff render --id <id|latest> --target <tool>")
-	fmt.Println("  session-handoff export --id <id|latest> [--format markdown|json] [--output handoff.md]")
-	fmt.Println("  session-handoff import --input handoff.json")
+func printUsage(w io.Writer) {
+	fmt.Fprintln(w, "session-handoff: portable handoff bundles for AI coding sessions")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Usage:")
+	fmt.Fprintln(w, "  session-handoff save --tool <name> --project <path> --title <text> --summary <text> [--next <item>]...")
+	fmt.Fprintln(w, "  session-handoff list [--json] [--tool <name>] [--project <path>] [--since <duration>] [--limit <n>]")
+	fmt.Fprintln(w, "  session-handoff render --id <id|latest> --target <tool>")
+	fmt.Fprintln(w, "  session-handoff export --id <id|latest> [--format markdown|json] [--output handoff.md]")
+	fmt.Fprintln(w, "  session-handoff import --input handoff.json")
 }
 
-func cmdSave(args []string) error {
+func cmdSave(args []string, stdout io.Writer) error {
 	fs := flag.NewFlagSet("save", flag.ContinueOnError)
 	tool := fs.String("tool", "", "source tool name (codex, claude-code, cursor, etc)")
 	project := fs.String("project", "", "project path")
@@ -86,12 +90,16 @@ func cmdSave(args []string) error {
 		return err
 	}
 
-	recID := generateUniqueID(store.Items, now)
+	existing := make([]string, 0, len(store.Items))
+	for _, it := range store.Items {
+		existing = append(existing, it.ID)
+	}
+	recID := handoffid.Generate(existing, now)
 	if recID == "" {
 		return errors.New("could not allocate unique handoff id")
 	}
 
-	rec := handoffRecord{
+	rec := HandoffRecord{
 		ID:        recID,
 		CreatedAt: now.Format(time.RFC3339),
 		Tool:      strings.TrimSpace(*tool),
@@ -107,11 +115,11 @@ func cmdSave(args []string) error {
 		return err
 	}
 
-	fmt.Printf("saved handoff %s\n", rec.ID)
+	fmt.Fprintf(stdout, "saved handoff %s\n", rec.ID)
 	return nil
 }
 
-func cmdList(args []string) error {
+func cmdList(args []string, stdout io.Writer) error {
 	fs := flag.NewFlagSet("list", flag.ContinueOnError)
 	asJSON := fs.Bool("json", false, "print records as json")
 	tool := fs.String("tool", "", "filter by source tool")
@@ -135,7 +143,7 @@ func cmdList(args []string) error {
 		return err
 	}
 
-	items := append([]handoffRecord(nil), store.Items...)
+	items := append([]HandoffRecord(nil), store.Items...)
 	sort.Slice(items, func(i, j int) bool {
 		return items[i].CreatedAt > items[j].CreatedAt
 	})
@@ -155,10 +163,10 @@ func cmdList(args []string) error {
 
 	if len(items) == 0 {
 		if *asJSON {
-			fmt.Println("[]")
+			fmt.Fprintln(stdout, "[]")
 			return nil
 		}
-		fmt.Println("no handoffs saved")
+		fmt.Fprintln(stdout, "no handoffs saved")
 		return nil
 	}
 
@@ -167,21 +175,21 @@ func cmdList(args []string) error {
 		if err != nil {
 			return fmt.Errorf("encode json list: %w", err)
 		}
-		fmt.Println(string(data))
+		fmt.Fprintln(stdout, string(data))
 		return nil
 	}
 
 	for _, item := range items {
-		fmt.Printf("%s  %-12s  %s\n", item.ID, item.Tool, item.Title)
-		fmt.Printf("  project: %s\n", item.Project)
+		fmt.Fprintf(stdout, "%s  %-12s  %s\n", item.ID, item.Tool, item.Title)
+		fmt.Fprintf(stdout, "  project: %s\n", item.Project)
 		if len(item.Next) > 0 {
-			fmt.Printf("  next: %s\n", strings.Join(item.Next, " | "))
+			fmt.Fprintf(stdout, "  next: %s\n", strings.Join(item.Next, " | "))
 		}
 	}
 	return nil
 }
 
-func cmdRender(args []string) error {
+func cmdRender(args []string, stdout io.Writer) error {
 	fs := flag.NewFlagSet("render", flag.ContinueOnError)
 	id := fs.String("id", "latest", "handoff id or latest")
 	target := fs.String("target", "", "target tool")
@@ -197,11 +205,11 @@ func cmdRender(args []string) error {
 		return err
 	}
 
-	fmt.Print(renderMarkdown(rec, strings.TrimSpace(*target)))
+	fmt.Fprint(stdout, RenderMarkdown(rec, strings.TrimSpace(*target)))
 	return nil
 }
 
-func cmdExport(args []string) error {
+func cmdExport(args []string, stdout io.Writer) error {
 	fs := flag.NewFlagSet("export", flag.ContinueOnError)
 	id := fs.String("id", "latest", "handoff id or latest")
 	out := fs.String("output", "", "file path (default stdout)")
@@ -218,13 +226,13 @@ func cmdExport(args []string) error {
 	var payload string
 	switch strings.ToLower(strings.TrimSpace(*format)) {
 	case "markdown", "md":
-		payload = renderMarkdown(rec, "generic")
+		payload = RenderMarkdown(rec, "generic")
 	case "json":
-		digest, err := recordChecksum(rec)
+		digest, err := RecordChecksum(rec)
 		if err != nil {
 			return err
 		}
-		bundle := exportBundle{Version: 2, Checksum: digest, Record: rec}
+		bundle := ExportBundle{Version: 2, Checksum: digest, Record: rec}
 		data, err := json.MarshalIndent(bundle, "", "  ")
 		if err != nil {
 			return fmt.Errorf("encode export bundle: %w", err)
@@ -235,17 +243,17 @@ func cmdExport(args []string) error {
 	}
 
 	if strings.TrimSpace(*out) == "" {
-		fmt.Print(payload)
+		fmt.Fprint(stdout, payload)
 		return nil
 	}
 	if err := os.WriteFile(*out, []byte(payload), 0o644); err != nil {
 		return fmt.Errorf("write export file: %w", err)
 	}
-	fmt.Printf("exported %s\n", *out)
+	fmt.Fprintf(stdout, "exported %s\n", *out)
 	return nil
 }
 
-func cmdImport(args []string) error {
+func cmdImport(args []string, stdout io.Writer) error {
 	fs := flag.NewFlagSet("import", flag.ContinueOnError)
 	input := fs.String("input", "", "json bundle file path")
 	if err := fs.Parse(args); err != nil {
@@ -260,7 +268,7 @@ func cmdImport(args []string) error {
 		return fmt.Errorf("read import file: %w", err)
 	}
 
-	var bundle exportBundle
+	var bundle ExportBundle
 	if err := json.Unmarshal(data, &bundle); err != nil {
 		return fmt.Errorf("parse import bundle: %w", err)
 	}
@@ -269,7 +277,7 @@ func cmdImport(args []string) error {
 	}
 	rec := bundle.Record
 	if strings.TrimSpace(bundle.Checksum) != "" {
-		digest, err := recordChecksum(rec)
+		digest, err := RecordChecksum(rec)
 		if err != nil {
 			return err
 		}
@@ -298,6 +306,6 @@ func cmdImport(args []string) error {
 		return err
 	}
 
-	fmt.Printf("imported handoff %s\n", rec.ID)
+	fmt.Fprintf(stdout, "imported handoff %s\n", rec.ID)
 	return nil
 }

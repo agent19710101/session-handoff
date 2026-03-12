@@ -1,4 +1,4 @@
-package main
+package handoff
 
 import (
 	"errors"
@@ -8,12 +8,12 @@ import (
 	"time"
 )
 
-func filterByTool(items []handoffRecord, tool string) []handoffRecord {
+func filterByTool(items []HandoffRecord, tool string) []HandoffRecord {
 	wanted := strings.ToLower(strings.TrimSpace(tool))
 	if wanted == "" {
 		return items
 	}
-	filtered := make([]handoffRecord, 0, len(items))
+	filtered := make([]HandoffRecord, 0, len(items))
 	for _, item := range items {
 		if strings.ToLower(strings.TrimSpace(item.Tool)) == wanted {
 			filtered = append(filtered, item)
@@ -36,9 +36,9 @@ func parseSinceDuration(raw string) (time.Duration, error) {
 	return d, nil
 }
 
-func filterBySince(items []handoffRecord, now time.Time, window time.Duration) []handoffRecord {
+func filterBySince(items []HandoffRecord, now time.Time, window time.Duration) []HandoffRecord {
 	cutoff := now.Add(-window)
-	filtered := make([]handoffRecord, 0, len(items))
+	filtered := make([]HandoffRecord, 0, len(items))
 	for _, item := range items {
 		ts, err := time.Parse(time.RFC3339, item.CreatedAt)
 		if err != nil {
@@ -51,7 +51,7 @@ func filterBySince(items []handoffRecord, now time.Time, window time.Duration) [
 	return filtered
 }
 
-func filterByProject(items []handoffRecord, project string) []handoffRecord {
+func filterByProject(items []HandoffRecord, project string) []HandoffRecord {
 	if strings.TrimSpace(project) == "" {
 		return items
 	}
@@ -61,7 +61,7 @@ func filterByProject(items []handoffRecord, project string) []handoffRecord {
 	}
 	wanted = filepath.Clean(wanted)
 
-	filtered := make([]handoffRecord, 0, len(items))
+	filtered := make([]HandoffRecord, 0, len(items))
 	for _, item := range items {
 		if filepath.Clean(item.Project) == wanted {
 			filtered = append(filtered, item)
@@ -70,7 +70,7 @@ func filterByProject(items []handoffRecord, project string) []handoffRecord {
 	return filtered
 }
 
-func pickRecord(items []handoffRecord, id string) (handoffRecord, error) {
+func pickRecord(items []HandoffRecord, id string) (HandoffRecord, error) {
 	if strings.TrimSpace(id) == "latest" {
 		latest := items[0]
 		for _, it := range items[1:] {
@@ -85,7 +85,7 @@ func pickRecord(items []handoffRecord, id string) (handoffRecord, error) {
 			return it, nil
 		}
 	}
-	return handoffRecord{}, fmt.Errorf("handoff id %q not found", id)
+	return HandoffRecord{}, fmt.Errorf("handoff id %q not found", id)
 }
 
 func (m *multiFlag) String() string {

@@ -1,7 +1,7 @@
-package main
+package handoff
 
-// handoffRecord captures one saved coding-session handoff.
-type handoffRecord struct {
+// HandoffRecord captures one saved coding-session handoff.
+type HandoffRecord struct {
 	ID        string   `json:"id"`
 	CreatedAt string   `json:"created_at"`
 	Tool      string   `json:"tool"`
@@ -14,13 +14,13 @@ type handoffRecord struct {
 
 type storeFile struct {
 	Version int             `json:"version"`
-	Items   []handoffRecord `json:"items"`
+	Items   []HandoffRecord `json:"items"`
 }
 
-type exportBundle struct {
+type ExportBundle struct {
 	Version  int           `json:"version"`
 	Checksum string        `json:"checksum,omitempty"`
-	Record   handoffRecord `json:"record"`
+	Record   HandoffRecord `json:"record"`
 }
 
 type multiFlag []string

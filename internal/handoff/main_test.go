@@ -1,8 +1,9 @@
-package main
+package handoff
 
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,12 +21,12 @@ func TestExportJSONAndImport(t *testing.T) {
 		"--title", "Add parser",
 		"--summary", "Implemented parser traversal",
 		"--next", "Add fixtures",
-	}); err != nil {
+	}, io.Discard); err != nil {
 		t.Fatalf("cmdSave failed: %v", err)
 	}
 
 	bundlePath := filepath.Join(tmp, "bundle.json")
-	if err := cmdExport([]string{"--id", "latest", "--format", "json", "--output", bundlePath}); err != nil {
+	if err := cmdExport([]string{"--id", "latest", "--format", "json", "--output", bundlePath}, io.Discard); err != nil {
 		t.Fatalf("cmdExport json failed: %v", err)
 	}
 
@@ -39,7 +40,7 @@ func TestExportJSONAndImport(t *testing.T) {
 		t.Fatalf("remove store: %v", err)
 	}
 
-	if err := cmdImport([]string{"--input", bundlePath}); err != nil {
+	if err := cmdImport([]string{"--input", bundlePath}, io.Discard); err != nil {
 		t.Fatalf("cmdImport failed: %v", err)
 	}
 
@@ -63,7 +64,7 @@ func TestListJSONEmpty(t *testing.T) {
 	}
 	os.Stdout = w
 
-	callErr := cmdList([]string{"--json"})
+	callErr := cmdList([]string{"--json"}, w)
 	_ = w.Close()
 	os.Stdout = origStdout
 	if callErr != nil {
@@ -88,12 +89,12 @@ func TestExportJSONIncludesChecksum(t *testing.T) {
 		"--project", tmp,
 		"--title", "Checksum coverage",
 		"--summary", "Validating bundle integrity",
-	}); err != nil {
+	}, io.Discard); err != nil {
 		t.Fatalf("cmdSave failed: %v", err)
 	}
 
 	bundlePath := filepath.Join(tmp, "bundle.json")
-	if err := cmdExport([]string{"--id", "latest", "--format", "json", "--output", bundlePath}); err != nil {
+	if err := cmdExport([]string{"--id", "latest", "--format", "json", "--output", bundlePath}, io.Discard); err != nil {
 		t.Fatalf("cmdExport json failed: %v", err)
 	}
 
@@ -102,7 +103,7 @@ func TestExportJSONIncludesChecksum(t *testing.T) {
 		t.Fatalf("read bundle: %v", err)
 	}
 
-	var bundle exportBundle
+	var bundle ExportBundle
 	if err := json.Unmarshal(data, &bundle); err != nil {
 		t.Fatalf("parse bundle: %v", err)
 	}
@@ -118,7 +119,7 @@ func TestImportRejectsChecksumMismatch(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 
-	rec := handoffRecord{
+	rec := HandoffRecord{
 		ID:        "20260312-020000",
 		CreatedAt: "2026-03-12T01:00:00Z",
 		Tool:      "codex",
@@ -127,7 +128,7 @@ func TestImportRejectsChecksumMismatch(t *testing.T) {
 		Summary:   "Checksum mismatch test",
 	}
 
-	bundle := exportBundle{
+	bundle := ExportBundle{
 		Version:  2,
 		Checksum: strings.Repeat("0", 64),
 		Record:   rec,
@@ -142,7 +143,7 @@ func TestImportRejectsChecksumMismatch(t *testing.T) {
 		t.Fatalf("write bad bundle: %v", err)
 	}
 
-	err = cmdImport([]string{"--input", bundlePath})
+	err = cmdImport([]string{"--input", bundlePath}, io.Discard)
 	if err == nil {
 		t.Fatalf("expected checksum mismatch error")
 	}
@@ -157,7 +158,7 @@ func TestListFiltersByToolAndLimit(t *testing.T) {
 
 	store := storeFile{
 		Version: 1,
-		Items: []handoffRecord{
+		Items: []HandoffRecord{
 			{ID: "a", CreatedAt: time.Date(2026, 3, 12, 1, 0, 0, 0, time.UTC).Format(time.RFC3339), Tool: "codex", Project: "/p", Title: "A", Summary: "s"},
 			{ID: "b", CreatedAt: time.Date(2026, 3, 12, 2, 0, 0, 0, time.UTC).Format(time.RFC3339), Tool: "claude-code", Project: "/p", Title: "B", Summary: "s"},
 			{ID: "c", CreatedAt: time.Date(2026, 3, 12, 3, 0, 0, 0, time.UTC).Format(time.RFC3339), Tool: "codex", Project: "/p", Title: "C", Summary: "s"},
@@ -175,7 +176,7 @@ func TestListFiltersByToolAndLimit(t *testing.T) {
 	}
 	os.Stdout = w
 
-	callErr := cmdList([]string{"--json", "--tool", "codex", "--limit", "1"})
+	callErr := cmdList([]string{"--json", "--tool", "codex", "--limit", "1"}, w)
 	_ = w.Close()
 	os.Stdout = origStdout
 	if callErr != nil {
@@ -187,7 +188,7 @@ func TestListFiltersByToolAndLimit(t *testing.T) {
 		t.Fatalf("read output: %v", err)
 	}
 
-	var got []handoffRecord
+	var got []HandoffRecord
 	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
 		t.Fatalf("decode output: %v; output=%s", err, buf.String())
 	}
@@ -200,20 +201,20 @@ func TestListFiltersByToolAndLimit(t *testing.T) {
 }
 
 func TestListRejectsNegativeLimit(t *testing.T) {
-	if err := cmdList([]string{"--limit", "-1"}); err == nil {
+	if err := cmdList([]string{"--limit", "-1"}, io.Discard); err == nil {
 		t.Fatalf("expected validation error for negative limit")
 	}
 }
 
 func TestListRejectsInvalidSince(t *testing.T) {
-	if err := cmdList([]string{"--since", "later"}); err == nil {
+	if err := cmdList([]string{"--since", "later"}, io.Discard); err == nil {
 		t.Fatalf("expected validation error for invalid --since")
 	}
 }
 
 func TestFilterBySince(t *testing.T) {
 	now := time.Date(2026, 3, 12, 4, 0, 0, 0, time.UTC)
-	items := []handoffRecord{
+	items := []HandoffRecord{
 		{ID: "old", CreatedAt: now.Add(-3 * time.Hour).Format(time.RFC3339)},
 		{ID: "keep", CreatedAt: now.Add(-45 * time.Minute).Format(time.RFC3339)},
 		{ID: "future", CreatedAt: now.Add(15 * time.Minute).Format(time.RFC3339)},
@@ -237,7 +238,7 @@ func TestListFiltersByProject(t *testing.T) {
 	p2 := filepath.Join(tmp, "two")
 	store := storeFile{
 		Version: 1,
-		Items: []handoffRecord{
+		Items: []HandoffRecord{
 			{ID: "a", CreatedAt: time.Date(2026, 3, 12, 1, 0, 0, 0, time.UTC).Format(time.RFC3339), Tool: "codex", Project: p1, Title: "A", Summary: "s"},
 			{ID: "b", CreatedAt: time.Date(2026, 3, 12, 2, 0, 0, 0, time.UTC).Format(time.RFC3339), Tool: "codex", Project: p2, Title: "B", Summary: "s"},
 		},
@@ -254,7 +255,7 @@ func TestListFiltersByProject(t *testing.T) {
 	}
 	os.Stdout = w
 
-	callErr := cmdList([]string{"--json", "--project", p2})
+	callErr := cmdList([]string{"--json", "--project", p2}, w)
 	_ = w.Close()
 	os.Stdout = origStdout
 	if callErr != nil {
@@ -266,7 +267,7 @@ func TestListFiltersByProject(t *testing.T) {
 		t.Fatalf("read output: %v", err)
 	}
 
-	var got []handoffRecord
+	var got []HandoffRecord
 	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
 		t.Fatalf("decode output: %v; output=%s", err, buf.String())
 	}

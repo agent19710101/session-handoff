@@ -49,7 +49,7 @@ session-handoff import --input handoff.json
 ## Status
 
 Current capabilities:
-- modular CLI code layout (`main`, `store`, `filters`, `render`, `git` concerns split for easier iteration)
+- standard Go modular layout with `cmd/session-handoff`, `internal/handoff`, and reusable `pkg/handoffid`
 - local JSON store
 - append-only session records with collision-safe unique handoff IDs
 - deterministic handoff prompt rendering
@@ -61,14 +61,9 @@ Current capabilities:
 
 ## Minimal release plan (v0.x)
 
-- **v0.6.0 — reliability + CI gate**
-  - robust git status parsing for spaces/renames ([#2](https://github.com/agent19710101/session-handoff/issues/2))
-  - GitHub Actions for `gofmt` + `go test` on push/PR ([#3](https://github.com/agent19710101/session-handoff/issues/3))
-- **v0.7.0 — command quality hardening**
+- **v0.6.0 — command quality hardening**
   - expand tests for `save`/`render`/`export` edge cases ([#4](https://github.com/agent19710101/session-handoff/issues/4))
-- **v0.8.0 — deeper modularization**
-  - continue command/package split beyond current modular baseline ([#5](https://github.com/agent19710101/session-handoff/issues/5))
-- **v0.9.0 — trust + UX improvements**
+- **v0.7.0 — trust + UX improvements**
   - signed bundle verification (checksum + signer identity)
   - optional encrypted export bundles
   - TUI selector for prior handoffs
