@@ -79,28 +79,13 @@ func cmdSave(args []string, stdout io.Writer) error {
 		return fmt.Errorf("resolve project path: %w", err)
 	}
 
-	store, path, err := loadStore()
-	if err != nil {
-		return err
-	}
-
 	now := time.Now().UTC()
 	changed, err := detectChangedFiles(absProject)
 	if err != nil {
 		return err
 	}
 
-	existing := make([]string, 0, len(store.Items))
-	for _, it := range store.Items {
-		existing = append(existing, it.ID)
-	}
-	recID := handoffid.Generate(existing, now)
-	if recID == "" {
-		return errors.New("could not allocate unique handoff id")
-	}
-
 	rec := HandoffRecord{
-		ID:        recID,
 		CreatedAt: now.Format(time.RFC3339),
 		Tool:      strings.TrimSpace(*tool),
 		Project:   absProject,
@@ -110,8 +95,22 @@ func cmdSave(args []string, stdout io.Writer) error {
 		Changed:   changed,
 	}
 
-	store.Items = append(store.Items, rec)
-	if err := writeStore(path, store); err != nil {
+	if err := updateStore(func(store *storeFile) error {
+		existing := make([]string, 0, len(store.Items))
+		for _, it := range store.Items {
+			existing = append(existing, it.ID)
+		}
+		recID := handoffid.Generate(existing, now)
+		if recID == "" {
+			return errors.New("could not allocate unique handoff id")
+		}
+		rec.ID = recID
+		if err := validateRecord(rec); err != nil {
+			return err
+		}
+		store.Items = append(store.Items, rec)
+		return nil
+	}); err != nil {
 		return err
 	}
 
@@ -296,22 +295,22 @@ func cmdImport(args []string, stdout io.Writer) error {
 	} else if bundle.Version >= 2 {
 		return errors.New("import bundle missing checksum")
 	}
-	if strings.TrimSpace(rec.ID) == "" || strings.TrimSpace(rec.CreatedAt) == "" || strings.TrimSpace(rec.Tool) == "" || strings.TrimSpace(rec.Project) == "" || strings.TrimSpace(rec.Title) == "" || strings.TrimSpace(rec.Summary) == "" {
+	if strings.TrimSpace(rec.ID) == "" || strings.TrimSpace(rec.Tool) == "" || strings.TrimSpace(rec.Project) == "" || strings.TrimSpace(rec.Title) == "" || strings.TrimSpace(rec.Summary) == "" {
 		return errors.New("import bundle missing required record fields")
 	}
-
-	store, path, err := loadStore()
-	if err != nil {
-		return err
+	if err := validateRecord(rec); err != nil {
+		return fmt.Errorf("import bundle invalid record: %w", err)
 	}
-	for _, existing := range store.Items {
-		if existing.ID == rec.ID {
-			return fmt.Errorf("handoff %s already exists", rec.ID)
+
+	if err := updateStore(func(store *storeFile) error {
+		for _, existing := range store.Items {
+			if existing.ID == rec.ID {
+				return fmt.Errorf("handoff %s already exists", rec.ID)
+			}
 		}
-	}
-
-	store.Items = append(store.Items, rec)
-	if err := writeStore(path, store); err != nil {
+		store.Items = append(store.Items, rec)
+		return nil
+	}); err != nil {
 		return err
 	}
 

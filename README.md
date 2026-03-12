@@ -59,6 +59,30 @@ Current capabilities:
 - markdown + JSON bundle export (`export --target <tool>` tailors markdown handoff context)
 - SHA-256 checksum on JSON bundles with verification on import
 - JSON bundle import for cross-machine/tool transfer
+- RFC3339 UTC timestamp validation for stored/imported records
+- crash-safe atomic store updates with lock-based concurrent write protection
+
+## Store location and portability
+
+By default, records are stored in:
+
+- Linux: `${XDG_CONFIG_HOME:-~/.config}/session-handoff/handoffs.json`
+
+For portability, use JSON export/import bundles:
+
+```bash
+session-handoff export --id latest --format json --output handoff.json
+session-handoff import --input handoff.json
+```
+
+## Import trust model
+
+Imports are local and explicit (`--input <file>`). For safety:
+
+- v2 JSON bundles require a SHA-256 checksum match.
+- Imported records must have valid RFC3339 UTC (`Z`) timestamps.
+- `session-handoff` does not execute imported content; it stores and renders text fields only.
+- Treat bundles from untrusted sources as untrusted text data.
 
 ## Minimal release plan (v0.x)
 
