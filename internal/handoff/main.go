@@ -1,6 +1,7 @@
 package handoff
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -33,6 +35,8 @@ func Run(args []string, stdout, stderr io.Writer) error {
 		err = cmdExport(args[1:], stdout)
 	case "import":
 		err = cmdImport(args[1:], stdout)
+	case "select":
+		err = cmdSelect(args[1:], stdout)
 	case "help", "-h", "--help":
 		printUsage(stdout)
 		return nil
@@ -55,7 +59,8 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  session-handoff list [--json] [--id <prefix>] [--tool <name>] [--project <path>] [--query <text>] [--since <duration>] [--limit <n>]")
 	fmt.Fprintln(w, "  session-handoff render --id <id|latest> --target <tool>")
 	fmt.Fprintln(w, "  session-handoff export --id <id|latest> [--format markdown|json] [--target <tool>] [--output handoff.md]")
-	fmt.Fprintln(w, "  session-handoff import --input handoff.json [--on-conflict fail|skip|replace]")
+	fmt.Fprintln(w, "  session-handoff import --input handoff.json [--on-conflict fail|skip|replace] [--passphrase <text>] [--allow-unsigned]")
+	fmt.Fprintln(w, "  session-handoff select [--query <text>] [--tool <name>] [--project <path>] [--limit <n>] [--print-id]")
 }
 
 func cmdSave(args []string, stdout io.Writer) error {
@@ -222,6 +227,9 @@ func cmdExport(args []string, stdout io.Writer) error {
 	out := fs.String("output", "", "file path (default stdout)")
 	format := fs.String("format", "markdown", "output format: markdown|json")
 	target := fs.String("target", "generic", "target tool used for markdown export context")
+	signKey := fs.String("sign-key", "", "ed25519 PKCS8 private key PEM for signing JSON bundle")
+	signer := fs.String("signer", "", "signer display name metadata")
+	passphrase := fs.String("passphrase", "", "encrypt/decrypt passphrase for JSON bundles")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -245,11 +253,36 @@ func cmdExport(args []string, stdout io.Writer) error {
 			return err
 		}
 		bundle := ExportBundle{Version: 2, Checksum: digest, Record: rec}
+		if strings.TrimSpace(*signKey) != "" {
+			priv, pub, err := loadPrivateKey(strings.TrimSpace(*signKey))
+			if err != nil {
+				return err
+			}
+			bundle.Version = 3
+			bundle.Signer = &SignerMeta{
+				Name:      strings.TrimSpace(*signer),
+				KeyID:     publicKeyID(pub),
+				PublicKey: base64.StdEncoding.EncodeToString(pub),
+			}
+			bundle.Signature = signChecksum(priv, digest)
+		}
 		data, err := json.MarshalIndent(bundle, "", "  ")
 		if err != nil {
 			return fmt.Errorf("encode export bundle: %w", err)
 		}
-		payload = string(data) + "\n"
+		if strings.TrimSpace(*passphrase) != "" {
+			enc, err := encryptBundle(data, *passphrase)
+			if err != nil {
+				return err
+			}
+			encData, err := json.MarshalIndent(enc, "", "  ")
+			if err != nil {
+				return fmt.Errorf("encode encrypted export bundle: %w", err)
+			}
+			payload = string(encData) + "\n"
+		} else {
+			payload = string(data) + "\n"
+		}
 	default:
 		return fmt.Errorf("unsupported export format %q", *format)
 	}
@@ -269,6 +302,8 @@ func cmdImport(args []string, stdout io.Writer) error {
 	fs := flag.NewFlagSet("import", flag.ContinueOnError)
 	input := fs.String("input", "", "json bundle file path")
 	onConflict := fs.String("on-conflict", "fail", "how to handle existing handoff id: fail|skip|replace")
+	passphrase := fs.String("passphrase", "", "decrypt passphrase for encrypted bundles")
+	allowUnsigned := fs.Bool("allow-unsigned", false, "allow importing unsigned v2 bundles")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -291,6 +326,18 @@ func cmdImport(args []string, stdout io.Writer) error {
 		return fmt.Errorf("read import file: %w", err)
 	}
 
+	var encProbe EncryptedBundle
+	if err := json.Unmarshal(data, &encProbe); err == nil && strings.TrimSpace(encProbe.Ciphertext) != "" {
+		if strings.TrimSpace(*passphrase) == "" {
+			return errors.New("encrypted bundle requires --passphrase")
+		}
+		plain, err := decryptBundle(encProbe, *passphrase)
+		if err != nil {
+			return err
+		}
+		data = plain
+	}
+
 	var bundle ExportBundle
 	if err := json.Unmarshal(data, &bundle); err != nil {
 		return fmt.Errorf("parse import bundle: %w", err)
@@ -309,6 +356,15 @@ func cmdImport(args []string, stdout io.Writer) error {
 		}
 	} else if bundle.Version >= 2 {
 		return errors.New("import bundle missing checksum")
+	}
+	if strings.TrimSpace(bundle.Signature) != "" {
+		if err := verifyBundleSignature(bundle); err != nil {
+			return err
+		}
+	} else if bundle.Version >= 3 {
+		return errors.New("import bundle missing signature metadata")
+	} else if bundle.Version == 2 && !*allowUnsigned {
+		return errors.New("unsigned v2 bundle blocked; re-run with --allow-unsigned to import legacy checksum-only bundles")
 	}
 	if strings.TrimSpace(rec.ID) == "" || strings.TrimSpace(rec.Tool) == "" || strings.TrimSpace(rec.Project) == "" || strings.TrimSpace(rec.Title) == "" || strings.TrimSpace(rec.Summary) == "" {
 		return errors.New("import bundle missing required record fields")
@@ -343,5 +399,58 @@ func cmdImport(args []string, stdout io.Writer) error {
 	}
 
 	fmt.Fprintf(stdout, "%s handoff %s\n", result, rec.ID)
+	return nil
+}
+
+func cmdSelect(args []string, stdout io.Writer) error {
+	fs := flag.NewFlagSet("select", flag.ContinueOnError)
+	query := fs.String("query", "", "case-insensitive filter by title/summary/next")
+	tool := fs.String("tool", "", "filter by source tool")
+	project := fs.String("project", "", "filter by project path")
+	limit := fs.Int("limit", 0, "max number of records to show")
+	printID := fs.Bool("print-id", false, "print only selected id")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	store, _, err := loadStore()
+	if err != nil {
+		return err
+	}
+	items := append([]HandoffRecord(nil), store.Items...)
+	sort.Slice(items, func(i, j int) bool { return items[i].CreatedAt > items[j].CreatedAt })
+	if strings.TrimSpace(*tool) != "" {
+		items = filterByTool(items, *tool)
+	}
+	if strings.TrimSpace(*project) != "" {
+		items = filterByProject(items, *project)
+	}
+	if strings.TrimSpace(*query) != "" {
+		items = filterByQuery(items, *query)
+	}
+	if *limit > 0 && len(items) > *limit {
+		items = items[:*limit]
+	}
+	if len(items) == 0 {
+		return errors.New("no handoffs match selector filters")
+	}
+	if *printID {
+		fmt.Fprintln(stdout, items[0].ID)
+		return nil
+	}
+
+	for i, item := range items {
+		fmt.Fprintf(stdout, "%d) %s  %-10s %s\n", i+1, item.ID, item.Tool, item.Title)
+	}
+	fmt.Fprint(stdout, "Select number: ")
+	var input string
+	if _, err := fmt.Fscanln(os.Stdin, &input); err != nil {
+		return fmt.Errorf("read selection: %w", err)
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(input))
+	if err != nil || n < 1 || n > len(items) {
+		return errors.New("invalid selection")
+	}
+	fmt.Fprintln(stdout, items[n-1].ID)
 	return nil
 }

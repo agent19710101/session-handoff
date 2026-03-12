@@ -43,13 +43,25 @@ session-handoff render --id latest --target claude-code
 # Export as markdown (default), optionally tailored for target tool
 session-handoff export --id latest --target claude-code --output handoff.md
 
-# Export/import portable JSON bundle
+# Export/import portable JSON bundle (legacy checksum-only)
 session-handoff export --id latest --format json --output handoff.json
-session-handoff import --input handoff.json
+session-handoff import --input handoff.json --allow-unsigned
+
+# Signed + encrypted bundle workflow (recommended)
+session-handoff export --id latest --format json \
+  --sign-key ~/.config/session-handoff/signing-key.pem \
+  --signer "wregen" \
+  --passphrase "$HANDOFF_PASSPHRASE" \
+  --output handoff.secure.json
+session-handoff import --input handoff.secure.json --passphrase "$HANDOFF_PASSPHRASE"
+
+# Interactive selector / script-friendly output
+session-handoff select
+session-handoff select --query "refresh" --print-id
 
 # Control ID conflicts during import
-session-handoff import --input handoff.json --on-conflict skip
-session-handoff import --input handoff.json --on-conflict replace
+session-handoff import --input handoff.json --on-conflict skip --allow-unsigned
+session-handoff import --input handoff.json --on-conflict replace --allow-unsigned
 ```
 
 ## Status
@@ -62,7 +74,9 @@ Current capabilities:
 - git working-tree signals captured at save time (when project is a git repo)
 - `list --json` for scripting, plus `list --id`, `list --tool`, `list --project`, `list --query`, `list --since`, and `list --limit` filters for triage
 - markdown + JSON bundle export (`export --target <tool>` tailors markdown handoff context)
-- SHA-256 checksum on JSON bundles with verification on import
+- SHA-256 checksum on JSON bundles plus optional signer identity metadata + ed25519 signature verification
+- optional encrypted JSON bundles (`--passphrase`) for transfer-at-rest protection
+- interactive handoff selector (`select`) with script-friendly `--print-id` mode
 - JSON bundle import for cross-machine/tool transfer with conflict handling (`--on-conflict fail|skip|replace`)
 - RFC3339 UTC timestamp validation for stored/imported records
 - crash-safe atomic store updates with lock-based concurrent write protection
@@ -84,7 +98,9 @@ session-handoff import --input handoff.json
 
 Imports are local and explicit (`--input <file>`). For safety:
 
-- v2 JSON bundles require a SHA-256 checksum match.
+- v3 signed bundles verify checksum + signer metadata + ed25519 signature.
+- v2 checksum-only bundles are legacy and require explicit `--allow-unsigned` during import.
+- encrypted bundles require `--passphrase`; wrong passphrase fails import.
 - Imported records must have valid RFC3339 UTC (`Z`) timestamps.
 - `session-handoff` does not execute imported content; it stores and renders text fields only.
 - Treat bundles from untrusted sources as untrusted text data.
@@ -96,10 +112,10 @@ Imports are local and explicit (`--input <file>`). For safety:
 - **v0.6.8 — import conflict policy UX pass** ✅
   - added `import --on-conflict fail|skip|replace` for safer sync workflows
   - added conflict-policy tests for skip/replace/validation paths
-- **v0.7.0 — trust + UX improvements**
-  - signed bundle verification (checksum + signer identity) — [#11](https://github.com/agent19710101/session-handoff/issues/11)
-  - optional encrypted export bundles — [#12](https://github.com/agent19710101/session-handoff/issues/12)
-  - TUI selector for prior handoffs — [#13](https://github.com/agent19710101/session-handoff/issues/13)
+- **v0.7.0 — trust + UX improvements** ✅
+  - signed bundle verification (checksum + signer identity)
+  - optional encrypted export/import bundles
+  - interactive selector for prior handoffs (`select`)
 
 ## License
 

@@ -40,7 +40,7 @@ func TestExportJSONAndImport(t *testing.T) {
 		t.Fatalf("remove store: %v", err)
 	}
 
-	if err := cmdImport([]string{"--input", bundlePath}, io.Discard); err != nil {
+	if err := cmdImport([]string{"--input", bundlePath, "--allow-unsigned"}, io.Discard); err != nil {
 		t.Fatalf("cmdImport failed: %v", err)
 	}
 
@@ -143,7 +143,7 @@ func TestImportRejectsChecksumMismatch(t *testing.T) {
 		t.Fatalf("write bad bundle: %v", err)
 	}
 
-	err = cmdImport([]string{"--input", bundlePath}, io.Discard)
+	err = cmdImport([]string{"--input", bundlePath, "--allow-unsigned"}, io.Discard)
 	if err == nil {
 		t.Fatalf("expected checksum mismatch error")
 	}
@@ -554,12 +554,12 @@ func TestCmdImportOnConflictSkip(t *testing.T) {
 		t.Fatalf("write bundle: %v", err)
 	}
 
-	if err := cmdImport([]string{"--input", bundlePath}, io.Discard); err != nil {
+	if err := cmdImport([]string{"--input", bundlePath, "--allow-unsigned"}, io.Discard); err != nil {
 		t.Fatalf("first import failed: %v", err)
 	}
 
 	var out bytes.Buffer
-	if err := cmdImport([]string{"--input", bundlePath, "--on-conflict", "skip"}, &out); err != nil {
+	if err := cmdImport([]string{"--input", bundlePath, "--on-conflict", "skip", "--allow-unsigned"}, &out); err != nil {
 		t.Fatalf("skip import failed: %v", err)
 	}
 	if !strings.Contains(out.String(), "skipped handoff") {
@@ -612,7 +612,7 @@ func TestCmdImportOnConflictReplace(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if err := cmdImport([]string{"--input", bundlePath, "--on-conflict", "replace"}, &out); err != nil {
+	if err := cmdImport([]string{"--input", bundlePath, "--on-conflict", "replace", "--allow-unsigned"}, &out); err != nil {
 		t.Fatalf("replace import failed: %v", err)
 	}
 	if !strings.Contains(out.String(), "replaced handoff") {
