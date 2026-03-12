@@ -52,7 +52,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Usage:")
 	fmt.Fprintln(w, "  session-handoff save --tool <name> --project <path> --title <text> --summary <text> [--next <item>]...")
-	fmt.Fprintln(w, "  session-handoff list [--json] [--tool <name>] [--project <path>] [--query <text>] [--since <duration>] [--limit <n>]")
+	fmt.Fprintln(w, "  session-handoff list [--json] [--id <prefix>] [--tool <name>] [--project <path>] [--query <text>] [--since <duration>] [--limit <n>]")
 	fmt.Fprintln(w, "  session-handoff render --id <id|latest> --target <tool>")
 	fmt.Fprintln(w, "  session-handoff export --id <id|latest> [--format markdown|json] [--target <tool>] [--output handoff.md]")
 	fmt.Fprintln(w, "  session-handoff import --input handoff.json")
@@ -121,6 +121,7 @@ func cmdSave(args []string, stdout io.Writer) error {
 func cmdList(args []string, stdout io.Writer) error {
 	fs := flag.NewFlagSet("list", flag.ContinueOnError)
 	asJSON := fs.Bool("json", false, "print records as json")
+	idPrefix := fs.String("id", "", "filter by handoff id prefix")
 	tool := fs.String("tool", "", "filter by source tool")
 	project := fs.String("project", "", "filter by project path")
 	query := fs.String("query", "", "case-insensitive substring filter across title/summary/next")
@@ -148,6 +149,9 @@ func cmdList(args []string, stdout io.Writer) error {
 		return items[i].CreatedAt > items[j].CreatedAt
 	})
 
+	if strings.TrimSpace(*idPrefix) != "" {
+		items = filterByIDPrefix(items, *idPrefix)
+	}
 	if strings.TrimSpace(*tool) != "" {
 		items = filterByTool(items, *tool)
 	}

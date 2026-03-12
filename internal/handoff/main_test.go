@@ -200,6 +200,40 @@ func TestListFiltersByToolAndLimit(t *testing.T) {
 	}
 }
 
+func TestListFiltersByIDPrefix(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+
+	store := storeFile{
+		Version: 1,
+		Items: []HandoffRecord{
+			{ID: "20260312-010000", CreatedAt: "2026-03-12T01:00:00Z", Tool: "codex", Project: "/p", Title: "A", Summary: "s"},
+			{ID: "20260312-020000", CreatedAt: "2026-03-12T02:00:00Z", Tool: "codex", Project: "/p", Title: "B", Summary: "s"},
+			{ID: "20260311-230000", CreatedAt: "2026-03-11T23:00:00Z", Tool: "codex", Project: "/p", Title: "C", Summary: "s"},
+		},
+	}
+	storePath := filepath.Join(tmp, "session-handoff", "handoffs.json")
+	if err := writeStore(storePath, store); err != nil {
+		t.Fatalf("write store: %v", err)
+	}
+
+	var out bytes.Buffer
+	if err := cmdList([]string{"--json", "--id", "20260312"}, &out); err != nil {
+		t.Fatalf("cmdList failed: %v", err)
+	}
+
+	var got []HandoffRecord
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("decode output: %v; output=%s", err, out.String())
+	}
+	if len(got) != 2 {
+		t.Fatalf("expected 2 records for prefix, got %d", len(got))
+	}
+	if got[0].ID != "20260312-020000" || got[1].ID != "20260312-010000" {
+		t.Fatalf("unexpected id order: %+v", got)
+	}
+}
+
 func TestListRejectsNegativeLimit(t *testing.T) {
 	if err := cmdList([]string{"--limit", "-1"}, io.Discard); err == nil {
 		t.Fatalf("expected validation error for negative limit")

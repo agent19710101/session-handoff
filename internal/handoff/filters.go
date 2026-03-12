@@ -8,6 +8,21 @@ import (
 	"time"
 )
 
+func filterByIDPrefix(items []HandoffRecord, prefix string) []HandoffRecord {
+	wanted := strings.TrimSpace(prefix)
+	if wanted == "" {
+		return items
+	}
+
+	filtered := make([]HandoffRecord, 0, len(items))
+	for _, item := range items {
+		if strings.HasPrefix(item.ID, wanted) {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
+}
+
 func filterByTool(items []HandoffRecord, tool string) []HandoffRecord {
 	wanted := strings.ToLower(strings.TrimSpace(tool))
 	if wanted == "" {
