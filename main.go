@@ -73,7 +73,7 @@ func usage() {
 	fmt.Println()
 	fmt.Println("Usage:")
 	fmt.Println("  session-handoff save --tool <name> --project <path> --title <text> --summary <text> [--next <item>]...")
-	fmt.Println("  session-handoff list [--json]")
+	fmt.Println("  session-handoff list [--json] [--tool <name>] [--limit <n>]")
 	fmt.Println("  session-handoff render --id <id|latest> --target <tool>")
 	fmt.Println("  session-handoff export --id <id|latest> [--format markdown|json] [--output handoff.md]")
 	fmt.Println("  session-handoff import --input handoff.json")
@@ -134,15 +134,33 @@ func cmdSave(args []string) error {
 func cmdList(args []string) error {
 	fs := flag.NewFlagSet("list", flag.ContinueOnError)
 	asJSON := fs.Bool("json", false, "print records as json")
+	tool := fs.String("tool", "", "filter by source tool")
+	limit := fs.Int("limit", 0, "max number of most-recent records to show (0 = all)")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if *limit < 0 {
+		return errors.New("--limit must be >= 0")
 	}
 
 	store, _, err := loadStore()
 	if err != nil {
 		return err
 	}
-	if len(store.Items) == 0 {
+
+	items := append([]handoffRecord(nil), store.Items...)
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].CreatedAt > items[j].CreatedAt
+	})
+
+	if strings.TrimSpace(*tool) != "" {
+		items = filterByTool(items, *tool)
+	}
+	if *limit > 0 && len(items) > *limit {
+		items = items[:*limit]
+	}
+
+	if len(items) == 0 {
 		if *asJSON {
 			fmt.Println("[]")
 			return nil
@@ -150,11 +168,6 @@ func cmdList(args []string) error {
 		fmt.Println("no handoffs saved")
 		return nil
 	}
-
-	items := append([]handoffRecord(nil), store.Items...)
-	sort.Slice(items, func(i, j int) bool {
-		return items[i].CreatedAt > items[j].CreatedAt
-	})
 
 	if *asJSON {
 		data, err := json.MarshalIndent(items, "", "  ")
@@ -338,6 +351,20 @@ func renderMarkdown(rec handoffRecord, target string) string {
 	b.WriteString("- Run formatting and tests before finalizing.\n")
 	b.WriteString("- Summarize changes, risks, and follow-up tasks.\n")
 	return b.String()
+}
+
+func filterByTool(items []handoffRecord, tool string) []handoffRecord {
+	wanted := strings.ToLower(strings.TrimSpace(tool))
+	if wanted == "" {
+		return items
+	}
+	filtered := make([]handoffRecord, 0, len(items))
+	for _, item := range items {
+		if strings.ToLower(strings.TrimSpace(item.Tool)) == wanted {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
 }
 
 func pickRecord(items []handoffRecord, id string) (handoffRecord, error) {

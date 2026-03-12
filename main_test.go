@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestExportJSONAndImport(t *testing.T) {
@@ -147,5 +148,59 @@ func TestImportRejectsChecksumMismatch(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "checksum mismatch") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestListFiltersByToolAndLimit(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+
+	store := storeFile{
+		Version: 1,
+		Items: []handoffRecord{
+			{ID: "a", CreatedAt: time.Date(2026, 3, 12, 1, 0, 0, 0, time.UTC).Format(time.RFC3339), Tool: "codex", Project: "/p", Title: "A", Summary: "s"},
+			{ID: "b", CreatedAt: time.Date(2026, 3, 12, 2, 0, 0, 0, time.UTC).Format(time.RFC3339), Tool: "claude-code", Project: "/p", Title: "B", Summary: "s"},
+			{ID: "c", CreatedAt: time.Date(2026, 3, 12, 3, 0, 0, 0, time.UTC).Format(time.RFC3339), Tool: "codex", Project: "/p", Title: "C", Summary: "s"},
+		},
+	}
+	storePath := filepath.Join(tmp, "session-handoff", "handoffs.json")
+	if err := writeStore(storePath, store); err != nil {
+		t.Fatalf("write store: %v", err)
+	}
+
+	origStdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe: %v", err)
+	}
+	os.Stdout = w
+
+	callErr := cmdList([]string{"--json", "--tool", "codex", "--limit", "1"})
+	_ = w.Close()
+	os.Stdout = origStdout
+	if callErr != nil {
+		t.Fatalf("cmdList failed: %v", callErr)
+	}
+
+	var buf bytes.Buffer
+	if _, err := buf.ReadFrom(r); err != nil {
+		t.Fatalf("read output: %v", err)
+	}
+
+	var got []handoffRecord
+	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
+		t.Fatalf("decode output: %v; output=%s", err, buf.String())
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 record, got %d", len(got))
+	}
+	if got[0].ID != "c" {
+		t.Fatalf("expected latest codex record c, got %q", got[0].ID)
+	}
+}
+
+func TestListRejectsNegativeLimit(t *testing.T) {
+	if err := cmdList([]string{"--limit", "-1"}); err == nil {
+		t.Fatalf("expected validation error for negative limit")
 	}
 }
