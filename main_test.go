@@ -205,6 +205,30 @@ func TestListRejectsNegativeLimit(t *testing.T) {
 	}
 }
 
+func TestListRejectsInvalidSince(t *testing.T) {
+	if err := cmdList([]string{"--since", "later"}); err == nil {
+		t.Fatalf("expected validation error for invalid --since")
+	}
+}
+
+func TestFilterBySince(t *testing.T) {
+	now := time.Date(2026, 3, 12, 4, 0, 0, 0, time.UTC)
+	items := []handoffRecord{
+		{ID: "old", CreatedAt: now.Add(-3 * time.Hour).Format(time.RFC3339)},
+		{ID: "keep", CreatedAt: now.Add(-45 * time.Minute).Format(time.RFC3339)},
+		{ID: "future", CreatedAt: now.Add(15 * time.Minute).Format(time.RFC3339)},
+		{ID: "bad", CreatedAt: "not-a-time"},
+	}
+
+	got := filterBySince(items, now, 90*time.Minute)
+	if len(got) != 2 {
+		t.Fatalf("expected 2 recent records, got %d", len(got))
+	}
+	if got[0].ID != "keep" || got[1].ID != "future" {
+		t.Fatalf("unexpected records after since filter: %+v", got)
+	}
+}
+
 func TestListFiltersByProject(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)

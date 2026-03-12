@@ -73,7 +73,7 @@ func usage() {
 	fmt.Println()
 	fmt.Println("Usage:")
 	fmt.Println("  session-handoff save --tool <name> --project <path> --title <text> --summary <text> [--next <item>]...")
-	fmt.Println("  session-handoff list [--json] [--tool <name>] [--project <path>] [--limit <n>]")
+	fmt.Println("  session-handoff list [--json] [--tool <name>] [--project <path>] [--since <duration>] [--limit <n>]")
 	fmt.Println("  session-handoff render --id <id|latest> --target <tool>")
 	fmt.Println("  session-handoff export --id <id|latest> [--format markdown|json] [--output handoff.md]")
 	fmt.Println("  session-handoff import --input handoff.json")
@@ -137,11 +137,17 @@ func cmdList(args []string) error {
 	tool := fs.String("tool", "", "filter by source tool")
 	project := fs.String("project", "", "filter by project path")
 	limit := fs.Int("limit", 0, "max number of most-recent records to show (0 = all)")
+	since := fs.String("since", "", "show records from the last duration (e.g. 30m, 6h, 7h30m)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if *limit < 0 {
 		return errors.New("--limit must be >= 0")
+	}
+
+	sinceDuration, err := parseSinceDuration(*since)
+	if err != nil {
+		return err
 	}
 
 	store, _, err := loadStore()
@@ -159,6 +165,9 @@ func cmdList(args []string) error {
 	}
 	if strings.TrimSpace(*project) != "" {
 		items = filterByProject(items, *project)
+	}
+	if sinceDuration > 0 {
+		items = filterBySince(items, time.Now().UTC(), sinceDuration)
 	}
 	if *limit > 0 && len(items) > *limit {
 		items = items[:*limit]
@@ -365,6 +374,35 @@ func filterByTool(items []handoffRecord, tool string) []handoffRecord {
 	filtered := make([]handoffRecord, 0, len(items))
 	for _, item := range items {
 		if strings.ToLower(strings.TrimSpace(item.Tool)) == wanted {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
+}
+
+func parseSinceDuration(raw string) (time.Duration, error) {
+	if strings.TrimSpace(raw) == "" {
+		return 0, nil
+	}
+	d, err := time.ParseDuration(strings.TrimSpace(raw))
+	if err != nil {
+		return 0, fmt.Errorf("invalid --since duration %q: %w", raw, err)
+	}
+	if d <= 0 {
+		return 0, errors.New("--since must be > 0")
+	}
+	return d, nil
+}
+
+func filterBySince(items []handoffRecord, now time.Time, window time.Duration) []handoffRecord {
+	cutoff := now.Add(-window)
+	filtered := make([]handoffRecord, 0, len(items))
+	for _, item := range items {
+		ts, err := time.Parse(time.RFC3339, item.CreatedAt)
+		if err != nil {
+			continue
+		}
+		if !ts.Before(cutoff) {
 			filtered = append(filtered, item)
 		}
 	}
