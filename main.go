@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -30,8 +32,9 @@ type storeFile struct {
 }
 
 type exportBundle struct {
-	Version int           `json:"version"`
-	Record  handoffRecord `json:"record"`
+	Version  int           `json:"version"`
+	Checksum string        `json:"checksum,omitempty"`
+	Record   handoffRecord `json:"record"`
 }
 
 func main() {
@@ -211,7 +214,11 @@ func cmdExport(args []string) error {
 	case "markdown", "md":
 		payload = renderMarkdown(rec, "generic")
 	case "json":
-		bundle := exportBundle{Version: 1, Record: rec}
+		digest, err := recordChecksum(rec)
+		if err != nil {
+			return err
+		}
+		bundle := exportBundle{Version: 2, Checksum: digest, Record: rec}
 		data, err := json.MarshalIndent(bundle, "", "  ")
 		if err != nil {
 			return fmt.Errorf("encode export bundle: %w", err)
@@ -255,6 +262,17 @@ func cmdImport(args []string) error {
 		return errors.New("import bundle missing version")
 	}
 	rec := bundle.Record
+	if strings.TrimSpace(bundle.Checksum) != "" {
+		digest, err := recordChecksum(rec)
+		if err != nil {
+			return err
+		}
+		if digest != bundle.Checksum {
+			return errors.New("import bundle checksum mismatch")
+		}
+	} else if bundle.Version >= 2 {
+		return errors.New("import bundle missing checksum")
+	}
 	if strings.TrimSpace(rec.ID) == "" || strings.TrimSpace(rec.CreatedAt) == "" || strings.TrimSpace(rec.Tool) == "" || strings.TrimSpace(rec.Project) == "" || strings.TrimSpace(rec.Title) == "" || strings.TrimSpace(rec.Summary) == "" {
 		return errors.New("import bundle missing required record fields")
 	}
@@ -338,6 +356,15 @@ func pickRecord(items []handoffRecord, id string) (handoffRecord, error) {
 		}
 	}
 	return handoffRecord{}, fmt.Errorf("handoff id %q not found", id)
+}
+
+func recordChecksum(rec handoffRecord) (string, error) {
+	data, err := json.Marshal(rec)
+	if err != nil {
+		return "", fmt.Errorf("encode record checksum payload: %w", err)
+	}
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:]), nil
 }
 
 func detectChangedFiles(project string) ([]string, error) {

@@ -52,11 +52,12 @@ Current capabilities:
 - git working-tree signals captured at save time (when project is a git repo)
 - `list --json` for scripting
 - markdown + JSON bundle export
+- SHA-256 checksum on JSON bundles with verification on import
 - JSON bundle import for cross-machine/tool transfer
 
 ## Roadmap
 
-- bundle signature/checksum verification
+- signed bundle verification (checksum + signer identity)
 - TUI selector for previous sessions
 - optional encrypted export bundles
 
