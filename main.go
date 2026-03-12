@@ -29,6 +29,11 @@ type storeFile struct {
 	Items   []handoffRecord `json:"items"`
 }
 
+type exportBundle struct {
+	Version int           `json:"version"`
+	Record  handoffRecord `json:"record"`
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		usage()
@@ -45,6 +50,8 @@ func main() {
 		err = cmdRender(os.Args[2:])
 	case "export":
 		err = cmdExport(os.Args[2:])
+	case "import":
+		err = cmdImport(os.Args[2:])
 	case "help", "-h", "--help":
 		usage()
 		return
@@ -63,9 +70,10 @@ func usage() {
 	fmt.Println()
 	fmt.Println("Usage:")
 	fmt.Println("  session-handoff save --tool <name> --project <path> --title <text> --summary <text> [--next <item>]...")
-	fmt.Println("  session-handoff list")
+	fmt.Println("  session-handoff list [--json]")
 	fmt.Println("  session-handoff render --id <id|latest> --target <tool>")
-	fmt.Println("  session-handoff export --id <id|latest> [--output handoff.md]")
+	fmt.Println("  session-handoff export --id <id|latest> [--format markdown|json] [--output handoff.md]")
+	fmt.Println("  session-handoff import --input handoff.json")
 }
 
 func cmdSave(args []string) error {
@@ -122,6 +130,7 @@ func cmdSave(args []string) error {
 
 func cmdList(args []string) error {
 	fs := flag.NewFlagSet("list", flag.ContinueOnError)
+	asJSON := fs.Bool("json", false, "print records as json")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -131,6 +140,10 @@ func cmdList(args []string) error {
 		return err
 	}
 	if len(store.Items) == 0 {
+		if *asJSON {
+			fmt.Println("[]")
+			return nil
+		}
 		fmt.Println("no handoffs saved")
 		return nil
 	}
@@ -139,6 +152,15 @@ func cmdList(args []string) error {
 	sort.Slice(items, func(i, j int) bool {
 		return items[i].CreatedAt > items[j].CreatedAt
 	})
+
+	if *asJSON {
+		data, err := json.MarshalIndent(items, "", "  ")
+		if err != nil {
+			return fmt.Errorf("encode json list: %w", err)
+		}
+		fmt.Println(string(data))
+		return nil
+	}
 
 	for _, item := range items {
 		fmt.Printf("%s  %-12s  %s\n", item.ID, item.Tool, item.Title)
@@ -174,6 +196,7 @@ func cmdExport(args []string) error {
 	fs := flag.NewFlagSet("export", flag.ContinueOnError)
 	id := fs.String("id", "latest", "handoff id or latest")
 	out := fs.String("output", "", "file path (default stdout)")
+	format := fs.String("format", "markdown", "output format: markdown|json")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -182,15 +205,76 @@ func cmdExport(args []string) error {
 	if err != nil {
 		return err
 	}
-	md := renderMarkdown(rec, "generic")
+
+	var payload string
+	switch strings.ToLower(strings.TrimSpace(*format)) {
+	case "markdown", "md":
+		payload = renderMarkdown(rec, "generic")
+	case "json":
+		bundle := exportBundle{Version: 1, Record: rec}
+		data, err := json.MarshalIndent(bundle, "", "  ")
+		if err != nil {
+			return fmt.Errorf("encode export bundle: %w", err)
+		}
+		payload = string(data) + "\n"
+	default:
+		return fmt.Errorf("unsupported export format %q", *format)
+	}
+
 	if strings.TrimSpace(*out) == "" {
-		fmt.Print(md)
+		fmt.Print(payload)
 		return nil
 	}
-	if err := os.WriteFile(*out, []byte(md), 0o644); err != nil {
+	if err := os.WriteFile(*out, []byte(payload), 0o644); err != nil {
 		return fmt.Errorf("write export file: %w", err)
 	}
 	fmt.Printf("exported %s\n", *out)
+	return nil
+}
+
+func cmdImport(args []string) error {
+	fs := flag.NewFlagSet("import", flag.ContinueOnError)
+	input := fs.String("input", "", "json bundle file path")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if strings.TrimSpace(*input) == "" {
+		return errors.New("import requires --input")
+	}
+
+	data, err := os.ReadFile(*input)
+	if err != nil {
+		return fmt.Errorf("read import file: %w", err)
+	}
+
+	var bundle exportBundle
+	if err := json.Unmarshal(data, &bundle); err != nil {
+		return fmt.Errorf("parse import bundle: %w", err)
+	}
+	if bundle.Version == 0 {
+		return errors.New("import bundle missing version")
+	}
+	rec := bundle.Record
+	if strings.TrimSpace(rec.ID) == "" || strings.TrimSpace(rec.CreatedAt) == "" || strings.TrimSpace(rec.Tool) == "" || strings.TrimSpace(rec.Project) == "" || strings.TrimSpace(rec.Title) == "" || strings.TrimSpace(rec.Summary) == "" {
+		return errors.New("import bundle missing required record fields")
+	}
+
+	store, path, err := loadStore()
+	if err != nil {
+		return err
+	}
+	for _, existing := range store.Items {
+		if existing.ID == rec.ID {
+			return fmt.Errorf("handoff %s already exists", rec.ID)
+		}
+	}
+
+	store.Items = append(store.Items, rec)
+	if err := writeStore(path, store); err != nil {
+		return err
+	}
+
+	fmt.Printf("imported handoff %s\n", rec.ID)
 	return nil
 }
 

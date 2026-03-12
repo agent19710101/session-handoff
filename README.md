@@ -2,12 +2,13 @@
 
 Portable handoff bundles for AI coding sessions.
 
-`session-handoff` is a Go CLI that records coding session context and renders a clean, tool-specific handoff prompt so work can continue in another agent/tool without losing intent.
+`session-handoff` is a Go CLI that records coding-session context and renders a clean handoff prompt so work can continue in another tool without losing intent.
 
-## Why
+## Problem
 
-Agent workflows are fragmented: Codex, Claude Code, Cursor, Gemini CLI, and CI bots all keep context differently.
-This tool keeps a local, structured history and generates consistent handoff briefs.
+Agent workflows are fragmented (Codex, Claude Code, Cursor, Gemini CLI, CI bots). Session state often stays trapped in one tool, making handoff slow and lossy.
+
+`session-handoff` keeps a local structured history and produces deterministic handoff bundles you can render, export, and now import on another machine.
 
 ## Install
 
@@ -15,10 +16,10 @@ This tool keeps a local, structured history and generates consistent handoff bri
 go install github.com/agent19710101/session-handoff@latest
 ```
 
-## Quick start
+## Examples
 
 ```bash
-# save a session note
+# Save a session note
 session-handoff save \
   --tool codex \
   --project ~/repos/my-app \
@@ -27,29 +28,37 @@ session-handoff save \
   --next "Fix refresh test matrix" \
   --next "Run race tests"
 
-# see history
+# List handoffs (human or JSON)
 session-handoff list
+session-handoff list --json
 
-# render handoff for another tool
+# Render handoff prompt for another tool
 session-handoff render --id latest --target claude-code
 
-# export markdown bundle for sharing
+# Export as markdown (default)
 session-handoff export --id latest --output handoff.md
+
+# Export/import portable JSON bundle
+session-handoff export --id latest --format json --output handoff.json
+session-handoff import --input handoff.json
 ```
 
 ## Status
 
-v0 focuses on:
+Current capabilities:
 - local JSON store
 - append-only session records
 - deterministic handoff prompt rendering
-- optional git working-tree signals captured at save time
-- markdown export for sharing in issues/PRs
+- git working-tree signals captured at save time (when project is a git repo)
+- `list --json` for scripting
+- markdown + JSON bundle export
+- JSON bundle import for cross-machine/tool transfer
 
-Planned next:
-- git-aware changed-files capture
-- TUI for selecting prior sessions
-- export/import bundles
+## Roadmap
+
+- bundle signature/checksum verification
+- TUI selector for previous sessions
+- optional encrypted export bundles
 
 ## License
 
