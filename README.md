@@ -33,6 +33,7 @@ session-handoff list
 session-handoff list --tool codex --limit 5
 session-handoff list --project ~/repos/my-app --json
 session-handoff list --json --tool claude-code
+session-handoff list --query "refresh" --json
 session-handoff list --since 6h --json
 
 # Render handoff prompt for another tool
@@ -54,15 +55,15 @@ Current capabilities:
 - append-only session records with collision-safe unique handoff IDs
 - deterministic handoff prompt rendering
 - git working-tree signals captured at save time (when project is a git repo)
-- `list --json` for scripting, plus `list --tool`, `list --project`, `list --since`, and `list --limit` filters for triage
+- `list --json` for scripting, plus `list --tool`, `list --project`, `list --query`, `list --since`, and `list --limit` filters for triage
 - markdown + JSON bundle export (`export --target <tool>` tailors markdown handoff context)
 - SHA-256 checksum on JSON bundles with verification on import
 - JSON bundle import for cross-machine/tool transfer
 
 ## Minimal release plan (v0.x)
 
-- **v0.6.3 — command quality hardening** ✅
-  - expanded tests for `save`/`render`/`export` edge cases ([#4](https://github.com/agent19710101/session-handoff/issues/4))
+- **v0.6.4 — list triage UX pass** ✅
+  - added `list --query <text>` filter across title/summary/next plus tests
 - **v0.7.0 — trust + UX improvements**
   - signed bundle verification (checksum + signer identity)
   - optional encrypted export bundles

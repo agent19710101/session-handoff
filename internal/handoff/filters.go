@@ -70,6 +70,22 @@ func filterByProject(items []HandoffRecord, project string) []HandoffRecord {
 	return filtered
 }
 
+func filterByQuery(items []HandoffRecord, query string) []HandoffRecord {
+	wanted := strings.ToLower(strings.TrimSpace(query))
+	if wanted == "" {
+		return items
+	}
+
+	filtered := make([]HandoffRecord, 0, len(items))
+	for _, item := range items {
+		haystack := strings.ToLower(strings.Join(append([]string{item.Title, item.Summary}, item.Next...), "\n"))
+		if strings.Contains(haystack, wanted) {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
+}
+
 func pickRecord(items []HandoffRecord, id string) (HandoffRecord, error) {
 	if strings.TrimSpace(id) == "latest" {
 		latest := items[0]

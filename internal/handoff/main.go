@@ -52,7 +52,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Usage:")
 	fmt.Fprintln(w, "  session-handoff save --tool <name> --project <path> --title <text> --summary <text> [--next <item>]...")
-	fmt.Fprintln(w, "  session-handoff list [--json] [--tool <name>] [--project <path>] [--since <duration>] [--limit <n>]")
+	fmt.Fprintln(w, "  session-handoff list [--json] [--tool <name>] [--project <path>] [--query <text>] [--since <duration>] [--limit <n>]")
 	fmt.Fprintln(w, "  session-handoff render --id <id|latest> --target <tool>")
 	fmt.Fprintln(w, "  session-handoff export --id <id|latest> [--format markdown|json] [--target <tool>] [--output handoff.md]")
 	fmt.Fprintln(w, "  session-handoff import --input handoff.json")
@@ -124,6 +124,7 @@ func cmdList(args []string, stdout io.Writer) error {
 	asJSON := fs.Bool("json", false, "print records as json")
 	tool := fs.String("tool", "", "filter by source tool")
 	project := fs.String("project", "", "filter by project path")
+	query := fs.String("query", "", "case-insensitive substring filter across title/summary/next")
 	limit := fs.Int("limit", 0, "max number of most-recent records to show (0 = all)")
 	since := fs.String("since", "", "show records from the last duration (e.g. 30m, 6h, 7h30m)")
 	if err := fs.Parse(args); err != nil {
@@ -153,6 +154,9 @@ func cmdList(args []string, stdout io.Writer) error {
 	}
 	if strings.TrimSpace(*project) != "" {
 		items = filterByProject(items, *project)
+	}
+	if strings.TrimSpace(*query) != "" {
+		items = filterByQuery(items, *query)
 	}
 	if sinceDuration > 0 {
 		items = filterBySince(items, time.Now().UTC(), sinceDuration)

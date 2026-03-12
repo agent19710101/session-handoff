@@ -212,6 +212,36 @@ func TestListRejectsInvalidSince(t *testing.T) {
 	}
 }
 
+func TestListFiltersByQuery(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+
+	store := storeFile{
+		Version: 1,
+		Items: []HandoffRecord{
+			{ID: "a", CreatedAt: time.Date(2026, 3, 12, 1, 0, 0, 0, time.UTC).Format(time.RFC3339), Tool: "codex", Project: "/p", Title: "Refactor parser", Summary: "Parser cleanup", Next: []string{"Add tests"}},
+			{ID: "b", CreatedAt: time.Date(2026, 3, 12, 2, 0, 0, 0, time.UTC).Format(time.RFC3339), Tool: "codex", Project: "/p", Title: "Update docs", Summary: "README examples", Next: []string{"Publish release"}},
+		},
+	}
+	storePath := filepath.Join(tmp, "session-handoff", "handoffs.json")
+	if err := writeStore(storePath, store); err != nil {
+		t.Fatalf("write store: %v", err)
+	}
+
+	var out bytes.Buffer
+	if err := cmdList([]string{"--json", "--query", "parser"}, &out); err != nil {
+		t.Fatalf("cmdList failed: %v", err)
+	}
+
+	var got []HandoffRecord
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("decode output: %v; output=%s", err, out.String())
+	}
+	if len(got) != 1 || got[0].ID != "a" {
+		t.Fatalf("expected only parser record a, got %+v", got)
+	}
+}
+
 func TestFilterBySince(t *testing.T) {
 	now := time.Date(2026, 3, 12, 4, 0, 0, 0, time.UTC)
 	items := []HandoffRecord{
