@@ -49,6 +49,7 @@ session-handoff import --input handoff.json
 ## Status
 
 Current capabilities:
+- modular CLI code layout (`main`, `store`, `filters`, `render`, `git` concerns split for easier iteration)
 - local JSON store
 - append-only session records
 - deterministic handoff prompt rendering
