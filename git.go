@@ -1,14 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os/exec"
-	"strings"
+	"sort"
 )
 
 func detectChangedFiles(project string) ([]string, error) {
-	cmd := exec.Command("git", "-C", project, "status", "--short")
+	cmd := exec.Command("git", "-C", project, "status", "--porcelain=v1", "-z")
 	out, err := cmd.Output()
 	if err != nil {
 		var ee *exec.ExitError
@@ -17,18 +18,46 @@ func detectChangedFiles(project string) ([]string, error) {
 		}
 		return nil, fmt.Errorf("collect changed files: %w", err)
 	}
-	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	var files []string
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		parts := strings.Fields(line)
-		if len(parts) < 2 {
-			continue
-		}
-		files = append(files, strings.Join(parts[1:], " "))
+	files, err := parsePorcelainV1Z(out)
+	if err != nil {
+		return nil, fmt.Errorf("parse changed files: %w", err)
 	}
+	return files, nil
+}
+
+func parsePorcelainV1Z(out []byte) ([]string, error) {
+	tokens := bytes.Split(out, []byte{0})
+	files := make([]string, 0, len(tokens))
+
+	for i := 0; i < len(tokens); i++ {
+		tok := tokens[i]
+		if len(tok) == 0 {
+			continue
+		}
+		if len(tok) < 4 || tok[2] != ' ' {
+			return nil, fmt.Errorf("invalid porcelain record %q", string(tok))
+		}
+
+		statusX := tok[0]
+		statusY := tok[1]
+		path := string(tok[3:])
+		if path == "" {
+			continue
+		}
+
+		if statusX == 'R' || statusX == 'C' || statusY == 'R' || statusY == 'C' {
+			if i+1 >= len(tokens) || len(tokens[i+1]) == 0 {
+				return nil, fmt.Errorf("missing source path for rename/copy %q", string(tok))
+			}
+			from := string(tokens[i+1])
+			files = append(files, fmt.Sprintf("%s -> %s", from, path))
+			i++
+			continue
+		}
+
+		files = append(files, path)
+	}
+
+	sort.Strings(files)
 	return files, nil
 }
