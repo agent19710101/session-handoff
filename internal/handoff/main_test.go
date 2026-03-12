@@ -420,16 +420,19 @@ func TestCmdExportStdoutAndFileModes(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if err := cmdExport([]string{"--id", "latest", "--format", "markdown"}, &out); err != nil {
+	if err := cmdExport([]string{"--id", "latest", "--format", "markdown", "--target", "claude-code"}, &out); err != nil {
 		t.Fatalf("cmdExport stdout failed: %v", err)
 	}
 	if !strings.Contains(out.String(), "# Session Handoff") {
 		t.Fatalf("expected markdown in stdout, got: %s", out.String())
 	}
+	if !strings.Contains(out.String(), "Target tool: claude-code") {
+		t.Fatalf("expected markdown target context, got: %s", out.String())
+	}
 
 	path := filepath.Join(tmp, "handoff.md")
 	out.Reset()
-	if err := cmdExport([]string{"--id", "latest", "--format", "markdown", "--output", path}, &out); err != nil {
+	if err := cmdExport([]string{"--id", "latest", "--format", "markdown", "--target", "", "--output", path}, &out); err != nil {
 		t.Fatalf("cmdExport file failed: %v", err)
 	}
 	if !strings.Contains(out.String(), "exported "+path) {
@@ -441,6 +444,9 @@ func TestCmdExportStdoutAndFileModes(t *testing.T) {
 	}
 	if !strings.Contains(string(data), "## Requested continuation") {
 		t.Fatalf("unexpected file content: %s", string(data))
+	}
+	if !strings.Contains(string(data), "Target tool: generic") {
+		t.Fatalf("expected fallback generic target, got: %s", string(data))
 	}
 }
 

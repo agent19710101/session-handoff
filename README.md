@@ -38,8 +38,8 @@ session-handoff list --since 6h --json
 # Render handoff prompt for another tool
 session-handoff render --id latest --target claude-code
 
-# Export as markdown (default)
-session-handoff export --id latest --output handoff.md
+# Export as markdown (default), optionally tailored for target tool
+session-handoff export --id latest --target claude-code --output handoff.md
 
 # Export/import portable JSON bundle
 session-handoff export --id latest --format json --output handoff.json
@@ -55,7 +55,7 @@ Current capabilities:
 - deterministic handoff prompt rendering
 - git working-tree signals captured at save time (when project is a git repo)
 - `list --json` for scripting, plus `list --tool`, `list --project`, `list --since`, and `list --limit` filters for triage
-- markdown + JSON bundle export
+- markdown + JSON bundle export (`export --target <tool>` tailors markdown handoff context)
 - SHA-256 checksum on JSON bundles with verification on import
 - JSON bundle import for cross-machine/tool transfer
 

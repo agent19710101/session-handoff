@@ -54,7 +54,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  session-handoff save --tool <name> --project <path> --title <text> --summary <text> [--next <item>]...")
 	fmt.Fprintln(w, "  session-handoff list [--json] [--tool <name>] [--project <path>] [--since <duration>] [--limit <n>]")
 	fmt.Fprintln(w, "  session-handoff render --id <id|latest> --target <tool>")
-	fmt.Fprintln(w, "  session-handoff export --id <id|latest> [--format markdown|json] [--output handoff.md]")
+	fmt.Fprintln(w, "  session-handoff export --id <id|latest> [--format markdown|json] [--target <tool>] [--output handoff.md]")
 	fmt.Fprintln(w, "  session-handoff import --input handoff.json")
 }
 
@@ -214,6 +214,7 @@ func cmdExport(args []string, stdout io.Writer) error {
 	id := fs.String("id", "latest", "handoff id or latest")
 	out := fs.String("output", "", "file path (default stdout)")
 	format := fs.String("format", "markdown", "output format: markdown|json")
+	target := fs.String("target", "generic", "target tool used for markdown export context")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -226,7 +227,11 @@ func cmdExport(args []string, stdout io.Writer) error {
 	var payload string
 	switch strings.ToLower(strings.TrimSpace(*format)) {
 	case "markdown", "md":
-		payload = RenderMarkdown(rec, "generic")
+		selectedTarget := strings.TrimSpace(*target)
+		if selectedTarget == "" {
+			selectedTarget = "generic"
+		}
+		payload = RenderMarkdown(rec, selectedTarget)
 	case "json":
 		digest, err := RecordChecksum(rec)
 		if err != nil {
