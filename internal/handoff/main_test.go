@@ -527,3 +527,113 @@ func TestCmdSaveInvalidProjectPath(t *testing.T) {
 		t.Fatalf("expected project path resolution error")
 	}
 }
+
+func TestCmdImportOnConflictSkip(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+
+	rec := HandoffRecord{
+		ID:        "20260312-020000",
+		CreatedAt: "2026-03-12T01:00:00Z",
+		Tool:      "codex",
+		Project:   "/tmp/project",
+		Title:     "Original",
+		Summary:   "Original summary",
+	}
+	digest, err := RecordChecksum(rec)
+	if err != nil {
+		t.Fatalf("checksum: %v", err)
+	}
+	bundle := ExportBundle{Version: 2, Checksum: digest, Record: rec}
+	data, err := json.Marshal(bundle)
+	if err != nil {
+		t.Fatalf("marshal bundle: %v", err)
+	}
+	bundlePath := filepath.Join(tmp, "bundle.json")
+	if err := os.WriteFile(bundlePath, data, 0o644); err != nil {
+		t.Fatalf("write bundle: %v", err)
+	}
+
+	if err := cmdImport([]string{"--input", bundlePath}, io.Discard); err != nil {
+		t.Fatalf("first import failed: %v", err)
+	}
+
+	var out bytes.Buffer
+	if err := cmdImport([]string{"--input", bundlePath, "--on-conflict", "skip"}, &out); err != nil {
+		t.Fatalf("skip import failed: %v", err)
+	}
+	if !strings.Contains(out.String(), "skipped handoff") {
+		t.Fatalf("expected skip message, got %q", out.String())
+	}
+
+	loaded, err := loadRecord(rec.ID)
+	if err != nil {
+		t.Fatalf("load record: %v", err)
+	}
+	if loaded.Title != "Original" {
+		t.Fatalf("record should stay unchanged after skip, got %q", loaded.Title)
+	}
+}
+
+func TestCmdImportOnConflictReplace(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+
+	original := HandoffRecord{
+		ID:        "20260312-020000",
+		CreatedAt: "2026-03-12T01:00:00Z",
+		Tool:      "codex",
+		Project:   "/tmp/project",
+		Title:     "Original",
+		Summary:   "Original summary",
+	}
+	if err := updateStore(func(store *storeFile) error {
+		store.Items = append(store.Items, original)
+		return nil
+	}); err != nil {
+		t.Fatalf("seed store: %v", err)
+	}
+
+	replacement := original
+	replacement.Title = "Updated"
+	replacement.Summary = "Updated summary"
+	digest, err := RecordChecksum(replacement)
+	if err != nil {
+		t.Fatalf("checksum: %v", err)
+	}
+	bundle := ExportBundle{Version: 2, Checksum: digest, Record: replacement}
+	data, err := json.Marshal(bundle)
+	if err != nil {
+		t.Fatalf("marshal bundle: %v", err)
+	}
+	bundlePath := filepath.Join(tmp, "bundle-replace.json")
+	if err := os.WriteFile(bundlePath, data, 0o644); err != nil {
+		t.Fatalf("write bundle: %v", err)
+	}
+
+	var out bytes.Buffer
+	if err := cmdImport([]string{"--input", bundlePath, "--on-conflict", "replace"}, &out); err != nil {
+		t.Fatalf("replace import failed: %v", err)
+	}
+	if !strings.Contains(out.String(), "replaced handoff") {
+		t.Fatalf("expected replace message, got %q", out.String())
+	}
+
+	loaded, err := loadRecord(replacement.ID)
+	if err != nil {
+		t.Fatalf("load record: %v", err)
+	}
+	if loaded.Title != "Updated" || loaded.Summary != "Updated summary" {
+		t.Fatalf("record was not replaced: %+v", loaded)
+	}
+}
+
+func TestCmdImportRejectsInvalidOnConflict(t *testing.T) {
+	err := cmdImport([]string{"--input", "bundle.json", "--on-conflict", "merge"}, io.Discard)
+	if err == nil {
+		t.Fatalf("expected invalid on-conflict error")
+	}
+	if !strings.Contains(err.Error(), "invalid --on-conflict") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}

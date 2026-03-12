@@ -46,6 +46,10 @@ session-handoff export --id latest --target claude-code --output handoff.md
 # Export/import portable JSON bundle
 session-handoff export --id latest --format json --output handoff.json
 session-handoff import --input handoff.json
+
+# Control ID conflicts during import
+session-handoff import --input handoff.json --on-conflict skip
+session-handoff import --input handoff.json --on-conflict replace
 ```
 
 ## Status
@@ -59,7 +63,7 @@ Current capabilities:
 - `list --json` for scripting, plus `list --id`, `list --tool`, `list --project`, `list --query`, `list --since`, and `list --limit` filters for triage
 - markdown + JSON bundle export (`export --target <tool>` tailors markdown handoff context)
 - SHA-256 checksum on JSON bundles with verification on import
-- JSON bundle import for cross-machine/tool transfer
+- JSON bundle import for cross-machine/tool transfer with conflict handling (`--on-conflict fail|skip|replace`)
 - RFC3339 UTC timestamp validation for stored/imported records
 - crash-safe atomic store updates with lock-based concurrent write protection
 
@@ -89,6 +93,9 @@ Imports are local and explicit (`--input <file>`). For safety:
 
 - **v0.6.4 — list triage UX pass** ✅
   - added `list --query <text>` filter across title/summary/next plus tests
+- **v0.6.8 — import conflict policy UX pass** ✅
+  - added `import --on-conflict fail|skip|replace` for safer sync workflows
+  - added conflict-policy tests for skip/replace/validation paths
 - **v0.7.0 — trust + UX improvements**
   - signed bundle verification (checksum + signer identity)
   - optional encrypted export bundles

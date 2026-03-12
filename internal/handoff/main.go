@@ -55,7 +55,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  session-handoff list [--json] [--id <prefix>] [--tool <name>] [--project <path>] [--query <text>] [--since <duration>] [--limit <n>]")
 	fmt.Fprintln(w, "  session-handoff render --id <id|latest> --target <tool>")
 	fmt.Fprintln(w, "  session-handoff export --id <id|latest> [--format markdown|json] [--target <tool>] [--output handoff.md]")
-	fmt.Fprintln(w, "  session-handoff import --input handoff.json")
+	fmt.Fprintln(w, "  session-handoff import --input handoff.json [--on-conflict fail|skip|replace]")
 }
 
 func cmdSave(args []string, stdout io.Writer) error {
@@ -268,11 +268,22 @@ func cmdExport(args []string, stdout io.Writer) error {
 func cmdImport(args []string, stdout io.Writer) error {
 	fs := flag.NewFlagSet("import", flag.ContinueOnError)
 	input := fs.String("input", "", "json bundle file path")
+	onConflict := fs.String("on-conflict", "fail", "how to handle existing handoff id: fail|skip|replace")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if strings.TrimSpace(*input) == "" {
 		return errors.New("import requires --input")
+	}
+
+	conflictMode := strings.ToLower(strings.TrimSpace(*onConflict))
+	switch conflictMode {
+	case "", "fail", "skip", "replace":
+		if conflictMode == "" {
+			conflictMode = "fail"
+		}
+	default:
+		return fmt.Errorf("invalid --on-conflict value %q (expected fail|skip|replace)", *onConflict)
 	}
 
 	data, err := os.ReadFile(*input)
@@ -306,18 +317,31 @@ func cmdImport(args []string, stdout io.Writer) error {
 		return fmt.Errorf("import bundle invalid record: %w", err)
 	}
 
+	var result string
 	if err := updateStore(func(store *storeFile) error {
-		for _, existing := range store.Items {
-			if existing.ID == rec.ID {
+		for i, existing := range store.Items {
+			if existing.ID != rec.ID {
+				continue
+			}
+			switch conflictMode {
+			case "skip":
+				result = "skipped"
+				return nil
+			case "replace":
+				store.Items[i] = rec
+				result = "replaced"
+				return nil
+			default:
 				return fmt.Errorf("handoff %s already exists", rec.ID)
 			}
 		}
 		store.Items = append(store.Items, rec)
+		result = "imported"
 		return nil
 	}); err != nil {
 		return err
 	}
 
-	fmt.Fprintf(stdout, "imported handoff %s\n", rec.ID)
+	fmt.Fprintf(stdout, "%s handoff %s\n", result, rec.ID)
 	return nil
 }
