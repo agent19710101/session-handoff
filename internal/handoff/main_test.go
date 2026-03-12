@@ -278,3 +278,182 @@ func TestListFiltersByProject(t *testing.T) {
 		t.Fatalf("expected project-filtered record b, got %q", got[0].ID)
 	}
 }
+
+func TestCmdSaveRequiredFlagsTable(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+
+	cases := []struct {
+		name string
+		args []string
+	}{
+		{name: "missing tool", args: []string{"--project", tmp, "--title", "t", "--summary", "s"}},
+		{name: "missing project", args: []string{"--tool", "codex", "--title", "t", "--summary", "s"}},
+		{name: "missing title", args: []string{"--tool", "codex", "--project", tmp, "--summary", "s"}},
+		{name: "missing summary", args: []string{"--tool", "codex", "--project", tmp, "--title", "t"}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := cmdSave(tc.args, io.Discard)
+			if err == nil {
+				t.Fatalf("expected validation error")
+			}
+			if !strings.Contains(err.Error(), "save requires --tool, --project, --title, --summary") {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestCmdSaveNormalizesProjectPath(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+
+	cwd := filepath.Join(tmp, "workspace")
+	project := filepath.Join(cwd, "project")
+	if err := os.MkdirAll(project, 0o755); err != nil {
+		t.Fatalf("mkdir project: %v", err)
+	}
+
+	prev, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	defer func() { _ = os.Chdir(prev) }()
+	if err := os.Chdir(cwd); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	if err := cmdSave([]string{
+		"--tool", "codex",
+		"--project", "./project",
+		"--title", "Path normalize",
+		"--summary", "Ensure project path becomes absolute",
+	}, io.Discard); err != nil {
+		t.Fatalf("cmdSave failed: %v", err)
+	}
+
+	rec, err := loadRecord("latest")
+	if err != nil {
+		t.Fatalf("load latest: %v", err)
+	}
+	if rec.Project != project {
+		t.Fatalf("expected absolute project path %q, got %q", project, rec.Project)
+	}
+}
+
+func TestCmdRenderOutputSections(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	storePath := filepath.Join(tmp, "session-handoff", "handoffs.json")
+
+	withSignals := HandoffRecord{
+		ID:        "with-signals",
+		CreatedAt: "2026-03-12T05:00:00Z",
+		Tool:      "codex",
+		Project:   "/tmp/proj",
+		Title:     "A",
+		Summary:   "Current summary",
+		Changed:   []string{"M cmd/main.go", "?? notes.md"},
+		Next:      []string{"Run tests"},
+	}
+	withoutSignals := withSignals
+	withoutSignals.ID = "without-signals"
+	withoutSignals.Changed = nil
+
+	if err := writeStore(storePath, storeFile{Version: 1, Items: []HandoffRecord{withSignals, withoutSignals}}); err != nil {
+		t.Fatalf("write store: %v", err)
+	}
+
+	var out bytes.Buffer
+	if err := cmdRender([]string{"--id", "with-signals", "--target", "claude-code"}, &out); err != nil {
+		t.Fatalf("cmdRender with signals failed: %v", err)
+	}
+	rendered := out.String()
+	for _, want := range []string{"## Current state", "## Constraints", "## Working tree signals", "M cmd/main.go", "Target tool: claude-code"} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("render output missing %q:\n%s", want, rendered)
+		}
+	}
+
+	out.Reset()
+	if err := cmdRender([]string{"--id", "without-signals", "--target", "claude-code"}, &out); err != nil {
+		t.Fatalf("cmdRender without signals failed: %v", err)
+	}
+	if strings.Contains(out.String(), "## Working tree signals") {
+		t.Fatalf("did not expect working tree section when changed is empty:\n%s", out.String())
+	}
+}
+
+func TestCmdExportUnsupportedFormat(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	if err := cmdSave([]string{
+		"--tool", "codex",
+		"--project", tmp,
+		"--title", "Export format",
+		"--summary", "Check unsupported format",
+	}, io.Discard); err != nil {
+		t.Fatalf("cmdSave failed: %v", err)
+	}
+
+	err := cmdExport([]string{"--id", "latest", "--format", "xml"}, io.Discard)
+	if err == nil {
+		t.Fatalf("expected unsupported format error")
+	}
+	if !strings.Contains(err.Error(), "unsupported export format") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestCmdExportStdoutAndFileModes(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	if err := cmdSave([]string{
+		"--tool", "codex",
+		"--project", tmp,
+		"--title", "Export modes",
+		"--summary", "Validate stdout and file modes",
+	}, io.Discard); err != nil {
+		t.Fatalf("cmdSave failed: %v", err)
+	}
+
+	var out bytes.Buffer
+	if err := cmdExport([]string{"--id", "latest", "--format", "markdown"}, &out); err != nil {
+		t.Fatalf("cmdExport stdout failed: %v", err)
+	}
+	if !strings.Contains(out.String(), "# Session Handoff") {
+		t.Fatalf("expected markdown in stdout, got: %s", out.String())
+	}
+
+	path := filepath.Join(tmp, "handoff.md")
+	out.Reset()
+	if err := cmdExport([]string{"--id", "latest", "--format", "markdown", "--output", path}, &out); err != nil {
+		t.Fatalf("cmdExport file failed: %v", err)
+	}
+	if !strings.Contains(out.String(), "exported "+path) {
+		t.Fatalf("expected exported message, got %q", out.String())
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read exported file: %v", err)
+	}
+	if !strings.Contains(string(data), "## Requested continuation") {
+		t.Fatalf("unexpected file content: %s", string(data))
+	}
+}
+
+func TestCmdRenderRequiresTarget(t *testing.T) {
+	if err := cmdRender([]string{"--id", "latest"}, io.Discard); err == nil {
+		t.Fatalf("expected missing target error")
+	}
+}
+
+func TestCmdSaveInvalidProjectPath(t *testing.T) {
+	bad := string([]byte{0x00})
+	err := cmdSave([]string{"--tool", "codex", "--project", bad, "--title", "x", "--summary", "y"}, io.Discard)
+	if err == nil {
+		t.Fatalf("expected project path resolution error")
+	}
+}

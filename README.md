@@ -61,8 +61,8 @@ Current capabilities:
 
 ## Minimal release plan (v0.x)
 
-- **v0.6.0 — command quality hardening**
-  - expand tests for `save`/`render`/`export` edge cases ([#4](https://github.com/agent19710101/session-handoff/issues/4))
+- **v0.6.3 — command quality hardening** ✅
+  - expanded tests for `save`/`render`/`export` edge cases ([#4](https://github.com/agent19710101/session-handoff/issues/4))
 - **v0.7.0 — trust + UX improvements**
   - signed bundle verification (checksum + signer identity)
   - optional encrypted export bundles
